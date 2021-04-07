@@ -120,13 +120,20 @@ client.on('messageReactionRemove', (react, author) => {
 });
  
 client.on('message', msg => {
-console.log(msg.content);
+
   if (msg.content.indexOf('.signup') === 0) {
     let title = ffTitle;
 
     const args = msg.content.split(' ');
-    if(args.length > 1 && args[1].toLowerCase() === 'rr') {
-      title = rrTitle;
+    if(args.length > 1) {
+      switch(args[1]){
+        case 'rr':
+          title = rrTitle;
+          break;
+        case 'help':
+          msg.reply('Welcome to State of Survival Sign Up Bot. We currently support the following commands:\n\tff: Creates a signup for for Fortress Fight event (this is the default if no event is specified)\n\trr: Creates a signup for Reservoir Raid event\n\nFor more information, visit our official Discord server: https://discord.gg/KZXQ5ycR');
+          return;
+      }
     } 
 
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
