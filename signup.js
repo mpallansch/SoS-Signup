@@ -3,41 +3,54 @@ const config = require('./constants/config.js');
 const Discord = require('discord.js');
 const client = new Discord.Client();
 
+const ffTitle = 'Fortress Fight';
+const rrTitle = 'Reservoir Raid';
 const embeds = {};
 const events = {
-  '🇦': 'Bunker 1',
-  '🇧': 'Bunker 2',
-  '🇨': 'Bunker 3',
-  '🇩': 'Bunker 4',
-  '🇪': 'Bunker 5',
-  '🇫': 'Bunker 6',
-  '🇬': 'Bunker 7',
-  '🇭': 'Bunker 8',
-  '🇮': 'Bunker 9',
-  '🇯': 'Bunker 10',
-  '🇰': 'Bunker 11',
-  '🇱': 'Bunker 12',
-  '1️⃣': 'Facility 1',
-  '2️⃣': 'Facility 2',
-  '3️⃣': 'Facility 3',
-  '4️⃣': 'Facility 4'
+  'Fortress Fight': {
+    '🇦': 'Bunker 1',
+    '🇧': 'Bunker 2',
+    '🇨': 'Bunker 3',
+    '🇩': 'Bunker 4',
+    '🇪': 'Bunker 5',
+    '🇫': 'Bunker 6',
+    '🇬': 'Bunker 7',
+    '🇭': 'Bunker 8',
+    '🇮': 'Bunker 9',
+    '🇯': 'Bunker 10',
+    '🇰': 'Bunker 11',
+    '🇱': 'Bunker 12',
+    '1️⃣': 'Facility 1',
+    '2️⃣': 'Facility 2',
+    '3️⃣': 'Facility 3',
+    '4️⃣': 'Facility 4'
+  },
+  'Reservoir Raid': {
+    '✅': 'Participant',
+    '⭕': 'Reservist',
+    '❌': 'Unavailable'
+  }
 };
 
-const renderDescription = (signedUp, closed) => {
-  let description = 'Status: ' + (closed ? 'Closed' : 'Running') + '\n\n';
-  Object.keys(events).forEach((key) => {
-    description += key + ': ' + events[key];
-    if(signedUp[key] && signedUp[key].length > 0){
+const renderEmbed = (embed) => {
+  let description = '';
+  Object.keys(events[embed.title]).forEach((key) => {
+    description += key + ': ' + events[embed.title][key];
+    if(embed.signedUp[key] && embed.signedUp[key].length > 0){
       description += '​\n```\n';
-      signedUp[key].forEach((user) => {
+      embed.signedUp[key].forEach((user) => {
         description += user + '\n';
       });
-      description += '```\n'
+      description += '```\n';
     } else { 
-      description += '\n```\n​                                   \n```\n'
+      description += '\n```\n​                                   \n```\n';
     }
   });
-  return description;
+  
+  return new Discord.MessageEmbed()
+      .setColor('#0099ff')
+      .setTitle(embed.title + ' Signup | Status: ' + (embed.closed ? 'Closed' : 'Running'))
+      .setDescription(description);
 };
  
 client.on('ready', () => {
@@ -46,78 +59,114 @@ client.on('ready', () => {
 
 client.on('messageReactionAdd', (react, author) => {
   let channel = react.message.channel.id;
-  if(!author.bot && embeds[channel]){
-    if(react.emoji.name === '🔚' && react.message.guild.member(author).hasPermission("ADMINISTRATOR")){
-      embeds[channel].closed = true;
-    } else if(events[react.emoji.name] && !embeds[channel].closed) {
-      embeds[channel].signedUp[react.emoji.name] = embeds[channel].signedUp[react.emoji.name] || [];
-      embeds[channel].signedUp[react.emoji.name].push(react.message.guild.member(author).displayName);
-    }
+  if(author.bot || !embeds[channel]){
+    return;
+  }
 
-    embeds[channel].message.edit(new Discord.MessageEmbed()
-      .setColor('#0099ff')
-      .setDescription(renderDescription(embeds[channel].signedUp, embeds[channel].closed)));
+  let embed;
+  let ffEmbed = embeds[channel][ffTitle];
+  let rrEmbed = embeds[channel][rrTitle];
+  if(ffEmbed.message.id === react.message.id){
+    embed = ffEmbed;
+  } else if(rrEmbed.message.id === react.message.id) {
+    embed = rrEmbed;
+  } else {
+    return;
+  }
+
+  if(react.emoji.name === '🔚' && react.message.guild.member(author).hasPermission("ADMINISTRATOR")){
+    embed.closed = true;
+
+    embed.message.edit(renderEmbed(embed)).then(() => {
+      delete embeds[channel][embed.title];
+      if(!embeds[channel][rrTitle] && !embeds[ffTitle]){
+        delete embeds[channel];
+      }
+    });
+  } else if(events[embed.title][react.emoji.name] && !embed.closed) {
+    embed.signedUp[react.emoji.name] = embed.signedUp[react.emoji.name] || [];
+    embed.signedUp[react.emoji.name].push(react.message.guild.member(author).displayName);
+    embed.message.edit(renderEmbed(embed));
   }
 });
 
 client.on('messageReactionRemove', (react, author) => {
   let channel = react.message.channel.id;
   let nickname = react.message.guild.member(author).displayName;
-  if(!author.bot && embeds[channel] && embeds[channel].signedUp[react.emoji.name]){
+  if(author.bot || !embeds[channel]){
+    return;
+  }
+
+  let embed;
+  let ffEmbed = embeds[channel][ffTitle];
+  let rrEmbed = embeds[channel][rrTitle];
+  if(ffEmbed.message.id === react.message.id){
+    embed = ffEmbed;
+  } else if(rrEmbed.message.id === react.message.id) {
+    embed = rrEmbed;
+  } else {
+    return;
+  }
+
+  if(embed.signedUp[react.emoji.name]){
     if(react.emoji.name === '🔚' && react.message.guild.member(author).hasPermission("ADMINISTRATOR")){
-      embeds[channel].closed = false;
-    } else if(events[react.emoji.name] && !embeds[channel].closed) {
-      embeds[channel].signedUp[react.emoji.name] = embeds[channel].signedUp[react.emoji.name].filter(user => user !== nickname);
+      embed.closed = false;
+    } else if(events[embed.title][react.emoji.name] && !embed.closed) {
+      embed.signedUp[react.emoji.name] = embed.signedUp[react.emoji.name].filter(user => user !== nickname);
     }
     
-    embeds[channel].message.edit(new Discord.MessageEmbed()
-      .setColor('#0099ff')
-      .setDescription(renderDescription(embeds[channel].signedUp, embeds[channel].closed)));
+    embed.message.edit(renderEmbed(embed));
   }
 });
  
 client.on('message', msg => {
-
-  let log = (msg.channel.guild ? msg.channel.guild.name : 'PM') + ' | ' + msg.channel.name + ' | ' + msg.author.username + ': ' + msg.content;
-  if (msg.attachments.size > 0) {
-    log += '\n\tAttachments:';
-    if (msg.attachments.every((attachment) => { log += '\n\t\t' + attachment.url; })){
-        //no op
-    }
-  }
-  log += '\n'
-  fs.appendFile('logs/' + new Date().toLocaleDateString('en-US').replace(/\//g, '-') + '.txt', log, function(){
-    //no op
-  });
-
+console.log(msg.content);
   if (msg.content.indexOf('.signup') === 0) {
-    const signup = new Discord.MessageEmbed()
-      .setColor('#0099ff')
-      .setDescription(renderDescription({}, false));
+    let title = ffTitle;
+
+    const args = msg.content.split(' ');
+    if(args.length > 1 && args[1].toLowerCase() === 'rr') {
+      title = rrTitle;
+    } 
+
+    embeds[msg.channel.id] = embeds[msg.channel.id] || {};
+    embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}};
+
+    const signup = renderEmbed(embeds[msg.channel.id][title]);
    
     msg.channel.send(signup).then((msgRef) => {
-      embeds[msg.channel.id] = {closed: false, message: msgRef, signedUp: {}};
+      embeds[msg.channel.id][title].message = msgRef
 
-      Promise.all([
-        msgRef.react('🇦'),
-        msgRef.react('🇧'),
-        msgRef.react('🇨'),
-        msgRef.react('🇩'),
-        msgRef.react('🇪'),
-        msgRef.react('🇫'),
-        msgRef.react('🇬'),
-        msgRef.react('🇭'),
-        msgRef.react('🇮'),
-        msgRef.react('🇯'),
-        msgRef.react('🇰'),
-        msgRef.react('🇱'),
-        msgRef.react('1️⃣'),
-        msgRef.react('2️⃣'),
-        msgRef.react('3️⃣'),
-        msgRef.react('4️⃣'),
-        msgRef.react('🔚')
-      ])
-      .catch(() => console.error('One of the emojis failed to react.'));
+      if(title === ffTitle) {
+        Promise.all([
+          msgRef.react('🇦'),
+          msgRef.react('🇧'),
+          msgRef.react('🇨'),
+          msgRef.react('🇩'),
+          msgRef.react('🇪'),
+          msgRef.react('🇫'),
+          msgRef.react('🇬'),
+          msgRef.react('🇭'),
+          msgRef.react('🇮'),
+          msgRef.react('🇯'),
+          msgRef.react('🇰'),
+          msgRef.react('🇱'),
+          msgRef.react('1️⃣'),
+          msgRef.react('2️⃣'),
+          msgRef.react('3️⃣'),
+          msgRef.react('4️⃣'),
+          msgRef.react('🔚')
+        ])
+        .catch(() => console.error('One of the emojis failed to react.'));
+      } else {
+        Promise.all([
+          msgRef.react('✅'),
+          msgRef.react('⭕'),
+          msgRef.react('❌'),
+          msgRef.react('🔚')
+        ])
+        .catch(() => console.error('One of the emojis failed to react.'));
+      }
     });
   }
 });
