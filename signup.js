@@ -67,9 +67,9 @@ client.on('messageReactionAdd', (react, author) => {
   let embed;
   let ffEmbed = embeds[channel][ffTitle];
   let rrEmbed = embeds[channel][rrTitle];
-  if(ffEmbed.message.id === react.message.id){
+  if(ffEmbed && ffEmbed.message.id === react.message.id){
     embed = ffEmbed;
-  } else if(rrEmbed.message.id === react.message.id) {
+  } else if(rrEmbed && rrEmbed.message.id === react.message.id) {
     embed = rrEmbed;
   } else {
     return;
@@ -115,9 +115,9 @@ client.on('messageReactionRemove', (react, author) => {
   let embed;
   let ffEmbed = embeds[channel][ffTitle];
   let rrEmbed = embeds[channel][rrTitle];
-  if(ffEmbed.message.id === react.message.id){
+  if(ffEmbed && ffEmbed.message.id === react.message.id){
     embed = ffEmbed;
-  } else if(rrEmbed.message.id === react.message.id) {
+  } else if(rrEmbed && rrEmbed.message.id === react.message.id) {
     embed = rrEmbed;
   } else {
     return;
