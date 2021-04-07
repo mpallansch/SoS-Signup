@@ -59,6 +59,7 @@ client.on('ready', () => {
 
 client.on('messageReactionAdd', (react, author) => {
   let channel = react.message.channel.id;
+  let nickname = react.message.guild.member(author).displayName;
   if(author.bot || !embeds[channel]){
     return;
   }
@@ -84,8 +85,22 @@ client.on('messageReactionAdd', (react, author) => {
       }
     });
   } else if(events[embed.title][react.emoji.name] && !embed.closed) {
+    if(embed.limit){
+      let currentSignups = 0;
+      Object.keys(embed.signedUp).forEach((symbol) => {
+        if(embed.signedUp[symbol].indexOf(nickname) !== -1) {
+          currentSignups++;
+        }
+      });
+
+      if(currentSignups >= embed.limit){
+        react.message.channel.send('<@' + author.id  + '> You have exceeded your signup limit');
+        return;
+      }
+    }
+
     embed.signedUp[react.emoji.name] = embed.signedUp[react.emoji.name] || [];
-    embed.signedUp[react.emoji.name].push(react.message.guild.member(author).displayName);
+    embed.signedUp[react.emoji.name].push(nickname);
     embed.message.edit(renderEmbed(embed));
   }
 });
@@ -123,6 +138,7 @@ client.on('message', msg => {
 
   if (msg.content.indexOf('.signup') === 0) {
     let title = ffTitle;
+    let limit;
 
     const args = msg.content.split(' ');
     if(args.length > 1) {
@@ -131,13 +147,25 @@ client.on('message', msg => {
           title = rrTitle;
           break;
         case 'help':
-          msg.reply('Welcome to State of Survival Sign Up Bot. We currently support the following commands:\n\tff: Creates a signup for for Fortress Fight event (this is the default if no event is specified)\n\trr: Creates a signup for Reservoir Raid event\n\nFor more information, visit our official Discord server: https://discord.gg/KZXQ5ycR');
+          msg.reply('Welcome to State of Survival Sign Up Bot. We currently support the following commands:\n\tff: Creates a signup for for Fortress Fight event (this is the default if no event is specified)\n\trr: Creates a signup for Reservoir Raid event\n\nIn addition we support the following flags:\n\tlimit=[number]: Sets the number of event fields that each user is limited to.\n\nFor more information, visit our official Discord server: https://discord.gg/KZXQ5ycR');
           return;
+      }
+
+      for(let i = 1; i < args.length; i++){
+        if(args[i].indexOf('limit=') === 0) {
+          let tokens = args[i].split('=');
+          if(tokens.length > 1) {
+            limitNum = parseInt(tokens[1]);
+            if(!isNaN(limitNum)){
+              limit = limitNum;
+            }
+          }
+        }
       }
     } 
 
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
-    embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}};
+    embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}, limit: limit};
 
     const signup = renderEmbed(embeds[msg.channel.id][title]);
    
