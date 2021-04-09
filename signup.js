@@ -1,7 +1,7 @@
 const fs = require('fs');
 const config = require('./constants/config.js');
 const Discord = require('discord.js');
-const client = new Discord.Client({"partials": ['CHANNEL', 'MESSAGE', 'REACTION']});
+const client = new Discord.Client({"partials": ['CHANNEL', 'MESSAGE', 'REACTION', 'USER']});
 
 const ffTitle = 'Fortress Fight';
 const rrTitle = 'Reservoir Raid';
@@ -32,6 +32,19 @@ const events = {
   }
 };
 
+const removeEmbed = (channel, title) => {
+  delete embeds[channel][title];
+  if(!embeds[channel][rrTitle] && !embeds[ffTitle]){
+    delete embeds[channel];
+  }
+
+  try {
+    fs.unlinkSync(`${config.dbPath}${config.dbPrefix}${channel}-${title}.json`);
+  } catch (e) {
+    console.log(`Error removing database file ${channel}-${title}.json`, e);
+  }
+};
+
 const renderEmbed = (embed, channel) => {
   let description = '';
   Object.keys(events[embed.title]).forEach((key) => {
@@ -48,11 +61,7 @@ const renderEmbed = (embed, channel) => {
   });
 
   if(embed.closed){
-    try {
-      fs.unlinkSync(`${config.dbPath}${config.dbPrefix}${channel}-${embed.title}.json`);
-    } catch (e) {
-      console.log(`Error removing database file ${channel}-${embed.title}.json`, e);
-    }
+    removeEmbed(channel, embed.title);
   } else {
     let dbEmbed = {...embed};
     dbEmbed.message = dbEmbed.message ? dbEmbed.message.id : undefined;
@@ -60,9 +69,9 @@ const renderEmbed = (embed, channel) => {
   }
   
   return new Discord.MessageEmbed()
-      .setColor('#0099ff')
-      .setTitle(embed.title + ' Signup | Status: ' + (embed.closed ? 'Closed' : 'Running'))
-      .setDescription(description);
+    .setColor('#0099ff')
+    .setTitle(embed.title + ' Signup | Status: ' + (embed.closed ? 'Closed' : 'Running'))
+    .setDescription(description);
 };
  
 client.on('ready', () => {
@@ -82,10 +91,18 @@ client.on('ready', () => {
             if(channel){
               channel.messages.fetch(embed.message).then((message) => {
                 embed.message = message;
+              }).catch((err) => {
+                console.log('Error fetching message: ', err);
+
+                removeEmbed(tokens[1], tokens[2]);
               });
             } else {
               console.log('Unable to fetch channel from previous message');
             }
+          }).catch((err) => {
+            console.log('Error fetching message: ', err);
+
+            removeEmbed(tokens[1], tokens[2]);
           });
         } else {
           console.log('Extraneous file: ' + fileName);
@@ -103,10 +120,13 @@ client.on('messageReactionAdd', async (react, author) => {
   if (react.message.partial) await react.message.fetch();
 
   let channel = react.message.channel.id;
-  let nickname = react.message.guild.member(author).displayName;
+
   if(author.bot || !embeds[channel]){
     return;
   }
+
+  let member = await react.message.guild.members.fetch(author);
+  let nickname = member.displayName;
 
   let embed;
   let ffEmbed = embeds[channel][ffTitle];
@@ -123,10 +143,7 @@ client.on('messageReactionAdd', async (react, author) => {
     embed.closed = true;
 
     embed.message.edit(renderEmbed(embed, channel)).then(() => {
-      delete embeds[channel][embed.title];
-      if(!embeds[channel][rrTitle] && !embeds[ffTitle]){
-        delete embeds[channel];
-      }
+      
     });
   } else if(events[embed.title][react.emoji.name] && !embed.closed) {
     if(embed.limit){
@@ -152,10 +169,13 @@ client.on('messageReactionAdd', async (react, author) => {
 client.on('messageReactionRemove', async (react, author) => {
   if (react.message.partial) await react.message.fetch();
   let channel = react.message.channel.id;
-  let nickname = react.message.guild.member(author).displayName;
+
   if(author.bot || !embeds[channel]){
     return;
   }
+
+  let member = await react.message.guild.members.fetch(author);
+  let nickname = member.displayName;
 
   let embed;
   let ffEmbed = embeds[channel][ffTitle];
@@ -212,8 +232,13 @@ client.on('message', msg => {
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
     if(embeds[msg.channel.id][title]){
       embeds[msg.channel.id][title].closed = true;
-      if(embeds[msg.channel.id][title].message) embeds[msg.channel.id][title].message.edit(renderEmbed(embeds[msg.channel.id][title], msg.channel.id));
+
+      if(embeds[msg.channel.id][title].message && typeof embeds[msg.channel.id][title].message.edit === 'function'){
+        embeds[msg.channel.id][title].message.edit(renderEmbed(embeds[msg.channel.id][title], msg.channel.id));
+      }
     }
+
+    embeds[msg.channel.id] = embeds[msg.channel.id] || {};
     embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}, limit: limit};
 
     const signup = renderEmbed(embeds[msg.channel.id][title], msg.channel.id);
