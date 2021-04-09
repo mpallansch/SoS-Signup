@@ -212,7 +212,7 @@ client.on('message', msg => {
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
     if(embeds[msg.channel.id][title]){
       embeds[msg.channel.id][title].closed = true;
-      if(embeds[msg.channel.id][title].message.edit(renderEmbed(embeds[msg.channel.id][title], msg.channel.id));
+      if(embeds[msg.channel.id][title].message) embeds[msg.channel.id][title].message.edit(renderEmbed(embeds[msg.channel.id][title], msg.channel.id));
     }
     embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}, limit: limit};
 
