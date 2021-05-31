@@ -36,6 +36,24 @@ const events = {
     '❌': 'Unavailable'
   }
 };
+const keyMapping = {
+  'A': '🇦',
+  'B': '🇧',
+  'C': '🇨',
+  'D': '🇩',
+  'E': '🇪',
+  'F': '🇫',
+  'G': '🇬',
+  'H': '🇭',
+  'I': '🇮',
+  'J': '🇯',
+  'K': '🇰',
+  'L': '🇱',
+  '1': '1️⃣',
+  '2': '2️⃣',
+  '3': '3️⃣',
+  '4': '4️⃣',
+};
 
 const removeEmbed = (channel, title) => {
   delete embeds[channel][title];
@@ -52,7 +70,7 @@ const removeEmbed = (channel, title) => {
 
 const renderEmbed = (embed, channel) => {
   let description = '';
-  Object.keys(events[embed.title]).forEach((key) => {
+  (embed.restriction || Object.keys(events[embed.title])).forEach((key) => {
     description += key + ': ' + events[embed.title][key];
     if(embed.signedUp[key] && embed.signedUp[key].length > 0){
       description += '​\n```\n';
@@ -221,6 +239,7 @@ client.on('message', msg => {
   if (msg.content.indexOf('.signup') === 0) {
     let title = ffTitle;
     let limit;
+    let restriction;
 
     const args = msg.content.split(' ');
     if(args.length > 1) {
@@ -243,6 +262,21 @@ client.on('message', msg => {
             }
           }
         }
+        if(args[i].indexOf('restrict=') === 0) {
+          let tokens = args[i].split('=');
+          if(tokens.length > 1){
+            tokens = tokens[1].split(',');
+            tokens.forEach((token) => {
+              if(events[title][token]){
+                restriction = restriction || [];
+                restriction.push(token);
+              } else if(keyMapping[token] && events[title][keyMapping[token]]){
+                restriction = restriction || [];
+                restriction.push(keyMapping[token]);
+              }
+            });
+          }
+        }
       }
     } 
 
@@ -260,7 +294,7 @@ client.on('message', msg => {
     }
 
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
-    embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}, limit: limit};
+    embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}, limit: limit, restriction: restriction};
 
     const signup = renderEmbed(embeds[msg.channel.id][title], msg.channel.id);
    
@@ -270,36 +304,17 @@ client.on('message', msg => {
 
         fs.writeFileSync(`${config.dbPath}${config.dbPrefix}${msg.channel.id}-${title}.json`, JSON.stringify(embeds[msg.channel.id][title]), {flag: 'w'});
 
-        if(title === ffTitle) {
-          Promise.all([
-            msgRef.react('🇦'),
-            msgRef.react('🇧'),
-            msgRef.react('🇨'),
-            msgRef.react('🇩'),
-            msgRef.react('🇪'),
-            msgRef.react('🇫'),
-            msgRef.react('🇬'),
-            msgRef.react('🇭'),
-            msgRef.react('🇮'),
-            msgRef.react('🇯'),
-            msgRef.react('🇰'),
-            msgRef.react('🇱'),
-            msgRef.react('1️⃣'),
-            msgRef.react('2️⃣'),
-            msgRef.react('3️⃣'),
-            msgRef.react('4️⃣'),
-            msgRef.react('🔚')
-          ])
+        let tokens = restriction || Object.keys(events[title]);
+        let promises = [];
+
+        tokens.forEach((token) => {
+          promises.push(msgRef.react(token));
+        });
+
+        promises.push(msgRef.react('🔚'));
+
+        Promise.all(promises)
           .catch(() => console.error('One of the emojis failed to react.'));
-        } else {
-          Promise.all([
-            msgRef.react('✅'),
-            msgRef.react('⭕'),
-            msgRef.react('❌'),
-            msgRef.react('🔚')
-          ])
-          .catch(() => console.error('One of the emojis failed to react.'));
-        }
       });
     } catch(e){
       msg.channel.send('Error. Please check bot permissions and try again.');
