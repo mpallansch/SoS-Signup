@@ -96,6 +96,22 @@ const renderEmbed = (embed, channel) => {
     .setTitle(embed.title + ' Signup | Status: ' + (embed.closed ? 'Closed' : 'Running'))
     .setDescription(description);
 };
+
+const violatesLimit = (embed, nickname) => {
+  if(embed.limit){
+    let currentSignups = 0;
+    Object.keys(embed.signedUp).forEach((symbol) => {
+      if(embed.signedUp[symbol].indexOf(nickname) !== -1) {
+        currentSignups++;
+      }
+    });
+
+    if(currentSignups >= embed.limit){
+      return true;
+    }
+  }
+  return false;
+};
  
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
@@ -110,6 +126,7 @@ client.on('ready', () => {
           embeds[tokens[1]] = embeds[tokens[1]] || {};
           embeds[tokens[1]][tokens[2]] = embed;
 
+          console.log('Fetching channel ', tokens[1]);
           client.channels.fetch(tokens[1]).then((channel) => {
             if(channel){
               channel.messages.fetch(embed.message).then((message) => {
@@ -173,18 +190,9 @@ client.on('messageReactionAdd', async (react, author) => {
       react.message.channel.send('Error. Please check bot permissions and try again.');
     }
   } else if(events[embed.title][react.emoji.name] && !embed.closed) {
-    if(embed.limit){
-      let currentSignups = 0;
-      Object.keys(embed.signedUp).forEach((symbol) => {
-        if(embed.signedUp[symbol].indexOf(nickname) !== -1) {
-          currentSignups++;
-        }
-      });
-
-      if(currentSignups >= embed.limit){
-        react.message.channel.send('<@' + author.id  + '> You have exceeded your signup limit');
-        return;
-      }
+    if(violatesLimit(embed, nickname)){
+      react.message.channel.send('<@' + author.id  + '> You have exceeded your signup limit');
+      return;
     }
 
     embed.signedUp[react.emoji.name] = embed.signedUp[react.emoji.name] || [];
@@ -247,6 +255,77 @@ client.on('message', msg => {
         case 'rr':
           title = rrTitle;
           break;
+        case 'add':
+          if(args.length >= 5){
+            if((args[2] === 'rr' || args[2] === 'ff')){
+              let title = args[2] === 'rr' ? rrTitle : ffTitle;
+              if(embeds[msg.channel.id] && embeds[msg.channel.id][title]){
+                let embed = embeds[msg.channel.id][title];
+                if(events[title][args[3]] || keyMapping[args[3]]){
+                  let key = keyMapping[args[3]] || args[3];
+                  
+                  if(!violatesLimit(embed, args[4])){
+                    embed.signedUp[key] = embed.signedUp[key] || [];
+                    embed.signedUp[key].push(args[4]);
+
+                    try {
+                      embed.message.edit(renderEmbed(embed, msg.channel.id));
+                    } catch(e) {
+                      msg.channel.send('Error. Please check bot permissions and try again.');
+                    }
+                  } else {
+                    msg.channel.send('Adding user would exceed limit.');
+                  }
+                } else {
+                  msg.channel.send('Unknown category.');
+                }
+              } else {
+                msg.channel.send('Unable to find signup running in this channel. Create one before adding users.');
+              }
+            } else {
+              msg.channel.send('Unknown event. Current options are `rr` and `ff`');
+            }
+          } else {
+            msg.channel.send('Invalid number of parameters. Usage: .signup add [event] [category] [name]');
+          }
+
+          msg.delete();
+          return;
+        case 'remove':
+          if(args.length >= 5){
+            if((args[2] === 'rr' || args[2] === 'ff')){
+              let title = args[2] === 'rr' ? rrTitle : ffTitle;
+              if(embeds[msg.channel.id][title]){
+                let embed = embeds[msg.channel.id][title];
+                if(events[title][args[3]] || keyMapping[args[3]]){
+                  let key = keyMapping[args[3]] || args[3];
+                  
+                  if(embed.signedUp[key] && embed.signedUp[key].indexOf(args[4]) !== -1){
+                    embed.signedUp[key] = embed.signedUp[key].filter(user => user !== args[4]);
+
+                    try {
+                      embed.message.edit(renderEmbed(embed, msg.channel.id));
+                    } catch(e) {
+                      msg.channel.send('Error. Please check bot permissions and try again.');
+                    }
+                  } else {
+                    msg.channel.send('User is not registered.');
+                  }
+                } else {
+                  msg.channel.send('Unknown category.');
+                }
+              } else {
+                msg.channel.send('Unable to find signup running in this channel. Create one before adding users.');
+              }
+            } else {
+              msg.channel.send('Unknown event. Current options are `rr` and `ff`');
+            }
+          } else {
+            msg.channel.send('Invalid number of parameters. Usage: .signup add [event] [category] [name]');
+          }
+
+          msg.delete();
+          return;
         case 'help':
           msg.reply('Welcome to State of Survival Sign Up Bot. We currently support the following commands:\n\tff: Creates a signup for for Fortress Fight event (this is the default if no event is specified)\n\trr: Creates a signup for Reservoir Raid event\n\nIn addition we support the following flags:\n\tlimit=[number]: Sets the number of event fields that each user is limited to.\n\nFor more information, visit our official Discord server: https://discord.gg/KZXQ5ycR');
           return;
@@ -270,7 +349,7 @@ client.on('message', msg => {
               if(events[title][token]){
                 restriction = restriction || [];
                 restriction.push(token);
-              } else if(keyMapping[token] && events[title][keyMapping[token]]){
+              } else if(keyMapping[token]){
                 restriction = restriction || [];
                 restriction.push(keyMapping[token]);
               }
