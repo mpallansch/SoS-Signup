@@ -2,6 +2,11 @@ const fs = require('fs');
 const config = require('./constants/config.js');
 const Discord = require('discord.js');
 const client = new Discord.Client({"partials": ['CHANNEL', 'MESSAGE', 'REACTION', 'USER']});
+const process = require('process');
+
+process.on('uncaughtException', function(err){
+  console.log(err);
+});
 
 const ffTitle = 'Fortress Fight';
 const rrTitle = 'Reservoir Raid';
@@ -142,9 +147,13 @@ client.on('messageReactionAdd', async (react, author) => {
   if(react.emoji.name === '🔚' && react.message.guild.member(author).hasPermission("ADMINISTRATOR")){
     embed.closed = true;
 
-    embed.message.edit(renderEmbed(embed, channel)).then(() => {
-      
-    });
+    try {
+      embed.message.edit(renderEmbed(embed, channel)).then(() => {
+        
+      });
+    } catch(e) {
+      react.message.channel.send('Error. Please check bot permissions and try again.');
+    }
   } else if(events[embed.title][react.emoji.name] && !embed.closed) {
     if(embed.limit){
       let currentSignups = 0;
@@ -162,7 +171,11 @@ client.on('messageReactionAdd', async (react, author) => {
 
     embed.signedUp[react.emoji.name] = embed.signedUp[react.emoji.name] || [];
     embed.signedUp[react.emoji.name].push(nickname);
-    embed.message.edit(renderEmbed(embed, channel));
+    try {
+      embed.message.edit(renderEmbed(embed, channel));
+    } catch(e) {
+      react.message.channel.send('Error. Please check bot permissions and try again.');
+    }
   }
 });
 
@@ -195,7 +208,11 @@ client.on('messageReactionRemove', async (react, author) => {
       embed.signedUp[react.emoji.name] = embed.signedUp[react.emoji.name].filter(user => user !== nickname);
     }
     
-    embed.message.edit(renderEmbed(embed, channel));
+    try {
+      embed.message.edit(renderEmbed(embed, channel));
+    } catch(e) {
+      react.message.channel.send('Error. Please check bot permissions and try again.');
+    }
   }
 });
  
@@ -234,7 +251,11 @@ client.on('message', msg => {
       embeds[msg.channel.id][title].closed = true;
 
       if(embeds[msg.channel.id][title].message && typeof embeds[msg.channel.id][title].message.edit === 'function'){
-        embeds[msg.channel.id][title].message.edit(renderEmbed(embeds[msg.channel.id][title], msg.channel.id));
+        try {
+          embeds[msg.channel.id][title].message.edit(renderEmbed(embeds[msg.channel.id][title], msg.channel.id));
+        } catch(e) {
+          msg.channel.send('Error. Please check bot permissions and try again');
+        }
       }
     }
 
@@ -243,42 +264,46 @@ client.on('message', msg => {
 
     const signup = renderEmbed(embeds[msg.channel.id][title], msg.channel.id);
    
-    msg.channel.send(signup).then((msgRef) => {
-      embeds[msg.channel.id][title].message = msgRef;
+    try {
+      msg.channel.send(signup).then((msgRef) => {
+        embeds[msg.channel.id][title].message = msgRef;
 
-      fs.writeFileSync(`${config.dbPath}${config.dbPrefix}${msg.channel.id}-${title}.json`, JSON.stringify(embeds[msg.channel.id][title]), {flag: 'w'});
+        fs.writeFileSync(`${config.dbPath}${config.dbPrefix}${msg.channel.id}-${title}.json`, JSON.stringify(embeds[msg.channel.id][title]), {flag: 'w'});
 
-      if(title === ffTitle) {
-        Promise.all([
-          msgRef.react('🇦'),
-          msgRef.react('🇧'),
-          msgRef.react('🇨'),
-          msgRef.react('🇩'),
-          msgRef.react('🇪'),
-          msgRef.react('🇫'),
-          msgRef.react('🇬'),
-          msgRef.react('🇭'),
-          msgRef.react('🇮'),
-          msgRef.react('🇯'),
-          msgRef.react('🇰'),
-          msgRef.react('🇱'),
-          msgRef.react('1️⃣'),
-          msgRef.react('2️⃣'),
-          msgRef.react('3️⃣'),
-          msgRef.react('4️⃣'),
-          msgRef.react('🔚')
-        ])
-        .catch(() => console.error('One of the emojis failed to react.'));
-      } else {
-        Promise.all([
-          msgRef.react('✅'),
-          msgRef.react('⭕'),
-          msgRef.react('❌'),
-          msgRef.react('🔚')
-        ])
-        .catch(() => console.error('One of the emojis failed to react.'));
-      }
-    });
+        if(title === ffTitle) {
+          Promise.all([
+            msgRef.react('🇦'),
+            msgRef.react('🇧'),
+            msgRef.react('🇨'),
+            msgRef.react('🇩'),
+            msgRef.react('🇪'),
+            msgRef.react('🇫'),
+            msgRef.react('🇬'),
+            msgRef.react('🇭'),
+            msgRef.react('🇮'),
+            msgRef.react('🇯'),
+            msgRef.react('🇰'),
+            msgRef.react('🇱'),
+            msgRef.react('1️⃣'),
+            msgRef.react('2️⃣'),
+            msgRef.react('3️⃣'),
+            msgRef.react('4️⃣'),
+            msgRef.react('🔚')
+          ])
+          .catch(() => console.error('One of the emojis failed to react.'));
+        } else {
+          Promise.all([
+            msgRef.react('✅'),
+            msgRef.react('⭕'),
+            msgRef.react('❌'),
+            msgRef.react('🔚')
+          ])
+          .catch(() => console.error('One of the emojis failed to react.'));
+        }
+      });
+    } catch(e){
+      msg.channel.send('Error. Please check bot permissions and try again.');
+    }
   }
 });
  
