@@ -117,7 +117,7 @@ const renderEmbed = (embed, channel) => {
   
   return new Discord.MessageEmbed()
     .setColor('#0099ff')
-    .setTitle(embed.title + ' Signup | Status: ' + (embed.closed ? 'Closed' : 'Running'))
+    .setTitle((embed.customTitle || (embed.title + ' Signup')) + ' | Status: ' + (embed.closed ? 'Closed' : 'Running'))
     .setDescription(description);
 };
 
@@ -270,6 +270,7 @@ client.on('message', msg => {
 
   if (msg.content.indexOf('.signup') === 0) {
     let title = ffTitle;
+    let customTitle;
     let limit;
     let restriction;
 
@@ -364,8 +365,7 @@ client.on('message', msg => {
               limit = limitNum;
             }
           }
-        }
-        if(args[i].indexOf('restrict=') === 0) {
+        } else if(args[i].indexOf('restrict=') === 0) {
           let tokens = args[i].split('=');
           if(tokens.length > 1){
             tokens = tokens[1].split(',');
@@ -379,7 +379,14 @@ client.on('message', msg => {
               }
             });
           }
-        }
+        } else if(args[i].indexOf('text=') === 0){
+          let tokens = args[i].split('=');
+          if(tokens.length > 1){
+            customTitle = tokens[1];
+          }
+        } else if(customTitle){
+          customTitle += (' ' + args[i]);
+        } 
       }
     } 
 
@@ -397,7 +404,7 @@ client.on('message', msg => {
     }
 
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
-    embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}, limit: limit, restriction: restriction};
+    embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle};
 
     const signup = renderEmbed(embeds[msg.channel.id][title], msg.channel.id);
    
