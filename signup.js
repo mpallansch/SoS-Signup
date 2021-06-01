@@ -203,7 +203,7 @@ client.on('messageReactionAdd', async (react, author) => {
     return;
   }
 
-  if(react.emoji.name === '🔚' && react.message.guild.member(author).hasPermission("ADMINISTRATOR")){
+  if(react.emoji.name === '🔚' && (author.id === embed.author || member.hasPermission("ADMINISTRATOR"))){
     embed.closed = true;
 
     try {
@@ -252,7 +252,7 @@ client.on('messageReactionRemove', async (react, author) => {
   }
 
   if(embed.signedUp[react.emoji.name]){
-    if(react.emoji.name === '🔚' && react.message.guild.member(author).hasPermission("ADMINISTRATOR")){
+    if(react.emoji.name === '🔚' && (author.id === embed.author || member.hasPermission("ADMINISTRATOR"))){
       embed.closed = false;
     } else if(events[embed.title][react.emoji.name] && !embed.closed) {
       embed.signedUp[react.emoji.name] = embed.signedUp[react.emoji.name].filter(user => user !== nickname);
@@ -270,6 +270,7 @@ client.on('message', msg => {
 
   if (msg.content.indexOf('.signup') === 0) {
     let title = ffTitle;
+    let lastFound;
     let customTitle;
     let limit;
     let restriction;
@@ -278,6 +279,7 @@ client.on('message', msg => {
     if(args.length > 1) {
       switch(args[1]){
         case 'rr':
+        case 'RR':
           title = rrTitle;
           break;
         case 'add':
@@ -359,6 +361,7 @@ client.on('message', msg => {
       for(let i = 1; i < args.length; i++){
         if(args[i].indexOf('limit=') === 0) {
           let tokens = args[i].split('=');
+          lastFound = undefined;
           if(tokens.length > 1) {
             limitNum = parseInt(tokens[1]);
             if(!isNaN(limitNum)){
@@ -368,6 +371,7 @@ client.on('message', msg => {
         } else if(args[i].indexOf('restrict=') === 0) {
           let tokens = args[i].split('=');
           if(tokens.length > 1){
+            lastFound = 'restrict';
             tokens = tokens[1].split(',');
             tokens.forEach((token) => {
               if(events[title][token]){
@@ -381,12 +385,22 @@ client.on('message', msg => {
           }
         } else if(args[i].indexOf('text=') === 0){
           let tokens = args[i].split('=');
+          lastFound = 'customTitle';
           if(tokens.length > 1){
             customTitle = tokens[1];
           }
-        } else if(customTitle){
-          customTitle += (' ' + args[i]);
-        } 
+        } else if(lastFound === 'customTitle'){
+          customTitle = (customTitle || '') + (' ' + args[i]);
+        } else if(lastFound === 'restrict') {
+          let key = args[i].replace(/,/g, '');
+          if(events[title][key]){
+            restriction = restriction || [];
+            restriction.push(key);
+          } else if(keyMapping[key]){
+            restriction = restriction || [];
+            restriction.push(keyMapping[key]);
+          }
+        }
       }
     } 
 
@@ -404,7 +418,7 @@ client.on('message', msg => {
     }
 
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
-    embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle};
+    embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
 
     const signup = renderEmbed(embeds[msg.channel.id][title], msg.channel.id);
    
