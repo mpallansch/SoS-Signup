@@ -378,43 +378,51 @@ client.on('message', msg => {
 
   if (args[0].toLowerCase() === '.add' || args[0].toLowerCase() === '.remove'){
     if(args.length >= 3){
-      let embedTitle = keyToTitleMapping[args[2]] || keyToTitleMapping[args[2].toLowerCase()];
+      let embedTitle = keyToTitleMapping[args[args.length - 1]] || keyToTitleMapping[args[args.length - 1].toLowerCase()];
       if(embedTitle){
         if(embeds[msg.channel.id] && embeds[msg.channel.id][embedTitle]){
           let embed = embeds[msg.channel.id][embedTitle];
-          let key = keyMapping[args[2]] || keyMapping[args[2].toLowerCase()] || args[2];
+          let key = keyMapping[args[args.length - 1]] || keyMapping[args[args.length - 1].toLowerCase()] || args[args.length - 1];
             
-          if(args[0] === '.add'){
-            if(!violatesLimit(embed, args[1])){
-              embed.signedUp[key] = embed.signedUp[key] || [];
-              embed.signedUp[key].push(args[1]);
-  
-              try {
-                embed.message.edit(renderEmbed(embed, msg.channel.id));
-              } catch(e) {
-                msg.channel.send('Error. Please check bot permissions and try again.');
+          let allNames = '';
+          for(var i = 1; i < args.length - 1; i++){
+            allNames += args[i] + ' ';
+          }
+          let allNamesArray = allNames.split(',');
+          for(var i = 0; i < allNamesArray.length; i++){
+            let name = allNamesArray[i].trim();
+            if(args[0] === '.add'){
+              if(!violatesLimit(embed, name)){
+                embed.signedUp[key] = embed.signedUp[key] || [];
+                embed.signedUp[key].push(name);
+    
+                try {
+                  embed.message.edit(renderEmbed(embed, msg.channel.id));
+                } catch(e) {
+                  msg.channel.send('Error. Please check bot permissions and try again.');
+                }
+              } else {
+                msg.channel.send('Adding user would exceed limit.');
               }
             } else {
-              msg.channel.send('Adding user would exceed limit.');
-            }
-          } else {
-            if(embed.signedUp[key] && embed.signedUp[key].indexOf(args[1]) !== -1){
-              embed.signedUp[key] = embed.signedUp[key].filter(user => user !== args[1]);
+              if(embed.signedUp[key] && embed.signedUp[key].indexOf(name) !== -1){
+                embed.signedUp[key] = embed.signedUp[key].filter(user => user !== name);
 
-              try {
-                embed.message.edit(renderEmbed(embed, msg.channel.id));
-              } catch(e) {
-                msg.channel.send('Error. Please check bot permissions and try again.');
+                try {
+                  embed.message.edit(renderEmbed(embed, msg.channel.id));
+                } catch(e) {
+                  msg.channel.send('Error. Please check bot permissions and try again.');
+                }
+              } else {
+                msg.channel.send('User is not registered.');
               }
-            } else {
-              msg.channel.send('User is not registered.');
             }
           }
         } else {
           msg.channel.send('Unable to find signup running in this channel. Create one before adding users.');
         }
       } else {
-        msg.channel.send('Unable to map category ' + args[2] + ' to an event signup.');
+        msg.channel.send('Unable to map category ' + args[args.length - 1] + ' to an event signup.');
       }
     } else {
       msg.channel.send('Invalid number of parameters. Usage: ' + args[0] + ' [name] [category]');
