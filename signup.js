@@ -420,8 +420,8 @@ client.on('message', async (msg) => {
             let name = allNamesArray[i].trim();
 
             let member, nickname;
-            if(name.indexOf('<@!') === 0 && name.indexOf('>') === (name.length - 1)){
-              member = await msg.guild.members.fetch(name.substring(3, name.length - 1));
+            if(name.indexOf('<@') === 0 && name.indexOf('>') === (name.length - 1)){
+              member = await msg.guild.members.fetch(name.substring(2, name.length - 1).replace(/\!/g,''));
               nickname = member.displayName;
             }
 
