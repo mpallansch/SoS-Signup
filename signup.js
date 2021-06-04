@@ -186,6 +186,10 @@ const keyMapping = {
   'u': '❌'
 };
 
+const expireCheckInterval = 2000;
+
+let messageQueue = [];
+
 const removeEmbed = (channel, title) => {
   delete embeds[channel][title];
   if(!embeds[channel][rrTitle] && !embeds[ffTitle]){
@@ -242,6 +246,14 @@ const violatesLimit = (embed, nickname) => {
     }
   }
   return false;
+};
+
+const sendMessage = (channel, message, expiresAfter = 60000) => {
+  channel.send(message).then((msg) => {
+    messageQueue.push({message: msg, expires: Date.now() + expiresAfter});
+  }).catch(() => {
+    console.log('Error sending message');
+  });
 };
  
 client.on('ready', () => {
@@ -318,11 +330,11 @@ client.on('messageReactionAdd', async (react, author) => {
         
       });
     } catch(e) {
-      react.message.channel.send('Error. Please check bot permissions and try again.');
+      sendMessage(react.message.channel, 'Error. Please check bot permissions and try again.');
     }
   } else if(events[embed.title][react.emoji.name] && !embed.closed) {
     if(violatesLimit(embed, nickname)){
-      react.message.channel.send('<@' + author.id  + '> You have exceeded your signup limit');
+      sendMessage(react.message.channel, '<@' + author.id  + '> You have exceeded your signup limit');
       return;
     }
 
@@ -331,7 +343,7 @@ client.on('messageReactionAdd', async (react, author) => {
     try {
       embed.message.edit(renderEmbed(embed, channel));
     } catch(e) {
-      react.message.channel.send('Error. Please check bot permissions and try again.');
+      sendMessage(react.message.channel, 'Error. Please check bot permissions and try again.');
     }
   }
 });
@@ -368,12 +380,12 @@ client.on('messageReactionRemove', async (react, author) => {
     try {
       embed.message.edit(renderEmbed(embed, channel));
     } catch(e) {
-      react.message.channel.send('Error. Please check bot permissions and try again.');
+      sendMessage(react.message.channel, 'Error. Please check bot permissions and try again.');
     }
   }
 });
  
-client.on('message', msg => {
+client.on('message', async (msg) => {
   const args = (msg.content && msg.content.length > 0 ) ? msg.content.split(' ') : [''];
 
   if (args[0].toLowerCase() === '.add' || args[0].toLowerCase() === '.remove'){
@@ -391,41 +403,48 @@ client.on('message', msg => {
           let allNamesArray = allNames.split(',');
           for(var i = 0; i < allNamesArray.length; i++){
             let name = allNamesArray[i].trim();
+
+            let member, nickname;
+            if(name.indexOf('<@!') === 0 && name.indexOf('>') === (name.length - 1)){
+              member = await msg.guild.members.fetch(name.substring(3, name.length - 1));
+              nickname = member.displayName;
+            }
+
             if(args[0] === '.add'){
               if(!violatesLimit(embed, name)){
                 embed.signedUp[key] = embed.signedUp[key] || [];
-                embed.signedUp[key].push(name);
+                embed.signedUp[key].push(nickname || name);
     
                 try {
                   embed.message.edit(renderEmbed(embed, msg.channel.id));
                 } catch(e) {
-                  msg.channel.send('Error. Please check bot permissions and try again.');
+                  sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
                 }
               } else {
-                msg.channel.send('Adding user would exceed limit.');
+                sendMessage(msg.channel, 'Adding user would exceed limit.');
               }
             } else {
-              if(embed.signedUp[key] && embed.signedUp[key].indexOf(name) !== -1){
+              if(embed.signedUp[key] && embed.signedUp[key].indexOf(nickname || name) !== -1){
                 embed.signedUp[key] = embed.signedUp[key].filter(user => user !== name);
 
                 try {
                   embed.message.edit(renderEmbed(embed, msg.channel.id));
                 } catch(e) {
-                  msg.channel.send('Error. Please check bot permissions and try again.');
+                  sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
                 }
               } else {
-                msg.channel.send('User is not registered.');
+                sendMessage(msg.channel, 'User is not registered.');
               }
             }
           }
         } else {
-          msg.channel.send('Unable to find signup running in this channel. Create one before adding users.');
+          sendMessage(msg.channel, 'Unable to find signup running in this channel. Create one before adding users.');
         }
       } else {
-        msg.channel.send('Unable to map category ' + args[args.length - 1] + ' to an event signup.');
+        sendMessage(msg.channel, 'Unable to map category ' + args[args.length - 1] + ' to an event signup.');
       }
     } else {
-      msg.channel.send('Invalid number of parameters. Usage: ' + args[0] + ' [name] [category]');
+      sendMessage(msg.channel, 'Invalid number of parameters. Usage: ' + args[0] + ' [name] [category]');
     }
 
     msg.delete();
@@ -500,7 +519,7 @@ client.on('message', msg => {
         try {
           embeds[msg.channel.id][title].message.edit(renderEmbed(embeds[msg.channel.id][title], msg.channel.id));
         } catch(e) {
-          msg.channel.send('Error. Please check bot permissions and try again');
+          sendMessage(msg.channel, 'Error. Please check bot permissions and try again');
         }
       }
     }
@@ -529,9 +548,23 @@ client.on('message', msg => {
           .catch(() => console.error('One of the emojis failed to react.'));
       });
     } catch(e){
-      msg.channel.send('Error. Please check bot permissions and try again.');
+      sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
     }
+
+    msg.delete();
   }
 });
+
+setInterval(() => {
+  for(var i = 0; i < messageQueue.length; i++){
+    if(messageQueue[i].expires <= Date.now()){
+      let message = messageQueue[i].message;
+
+      messageQueue.splice(i, 1);
+
+      message.delete();
+    }
+  }
+}, expireCheckInterval);
  
 client.login(config.loginToken);
