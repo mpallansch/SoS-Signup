@@ -36,6 +36,10 @@ const events = {
     '❌': 'Unavailable'
   }
 };
+const keyLimitMapping = {
+  '✅': 30,
+  '⭕': 10,
+};
 const keyToTitleMapping = {
   'A': 'Fortress Fight',
   'B': 'Fortress Fight',
@@ -206,7 +210,7 @@ const removeEmbed = (channel, title) => {
 const renderEmbed = (embed, channel) => {
   let description = '';
   (embed.restriction || Object.keys(events[embed.title])).forEach((key) => {
-    description += key + ': ' + events[embed.title][key];
+    description += key + ': ' + events[embed.title][key] + (keyLimitMapping[key] ? (' ' + (embed.signedUp[key] ? embed.signedUp[key].length : 0) + '/' + keyLimitMapping[key]) : '');
     if(embed.signedUp[key] && embed.signedUp[key].length > 0){
       description += '​\n```\n';
       embed.signedUp[key].forEach((user) => {
@@ -232,7 +236,14 @@ const renderEmbed = (embed, channel) => {
     .setDescription(description);
 };
 
-const violatesLimit = (embed, nickname) => {
+const violatesCategoryLimit = (embed, key) => {
+  if(keyLimitMapping[key] && embed.signedUp[key] && embed.signedUp[key].length === keyLimitMapping[key]){
+    return true;
+  }
+  return false;
+};
+
+const violatesUserLimit = (embed, nickname) => {
   if(embed.limit){
     let currentSignups = 0;
     Object.keys(embed.signedUp).forEach((symbol) => {
@@ -333,8 +344,12 @@ client.on('messageReactionAdd', async (react, author) => {
       sendMessage(react.message.channel, 'Error. Please check bot permissions and try again.');
     }
   } else if(events[embed.title][react.emoji.name] && !embed.closed) {
-    if(violatesLimit(embed, nickname)){
+    if(violatesUserLimit(embed, nickname)){
       sendMessage(react.message.channel, '<@' + author.id  + '> You have exceeded your signup limit');
+      return;
+    }
+    if(violatesCategoryLimit(embed, react.emoji.name)){
+      sendMessage(react.message.channel, 'Category has reached the limit.');
       return;
     }
 
@@ -411,14 +426,12 @@ client.on('message', async (msg) => {
             }
 
             if(args[0] === '.add'){
-              if(!violatesLimit(embed, name)){
-                embed.signedUp[key] = embed.signedUp[key] || [];
-                embed.signedUp[key].push(nickname || name);
-    
-                try {
-                  embed.message.edit(renderEmbed(embed, msg.channel.id));
-                } catch(e) {
-                  sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
+              if(!violatesUserLimit(embed, name)){
+                if(!violatesCategoryLimit(embed, key)){
+                  embed.signedUp[key] = embed.signedUp[key] || [];
+                  embed.signedUp[key].push(nickname || name);
+                } else {
+                  sendMessage(msg.channel, 'Adding user would exceed category limit.');
                 }
               } else {
                 sendMessage(msg.channel, 'Adding user would exceed limit.');
@@ -426,16 +439,16 @@ client.on('message', async (msg) => {
             } else {
               if(embed.signedUp[key] && embed.signedUp[key].indexOf(nickname || name) !== -1){
                 embed.signedUp[key] = embed.signedUp[key].filter(user => user !== name);
-
-                try {
-                  embed.message.edit(renderEmbed(embed, msg.channel.id));
-                } catch(e) {
-                  sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
-                }
               } else {
                 sendMessage(msg.channel, 'User is not registered.');
               }
             }
+          }
+           
+          try {
+            embed.message.edit(renderEmbed(embed, msg.channel.id));
+          } catch(e) {
+            sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
           }
         } else {
           sendMessage(msg.channel, 'Unable to find signup running in this channel. Create one before adding users.');
