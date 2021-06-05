@@ -191,6 +191,8 @@ const keyMapping = {
 };
 
 const expireCheckInterval = 2000;
+const commandExpiry = 30000;
+const responseExpiry = 60000;
 
 let messageQueue = [];
 
@@ -259,7 +261,7 @@ const violatesUserLimit = (embed, nickname) => {
   return false;
 };
 
-const sendMessage = (channel, message, expiresAfter = 60000) => {
+const sendMessage = (channel, message, expiresAfter = responseExpiry) => {
   channel.send(message).then((msg) => {
     messageQueue.push({message: msg, expires: Date.now() + expiresAfter});
   }).catch(() => {
@@ -438,7 +440,7 @@ client.on('message', async (msg) => {
               }
             } else {
               if(embed.signedUp[key] && embed.signedUp[key].indexOf(nickname || name) !== -1){
-                embed.signedUp[key] = embed.signedUp[key].filter(user => user !== name);
+                embed.signedUp[key] = embed.signedUp[key].filter(user => user !== (nickname || name));
               } else {
                 sendMessage(msg.channel, 'User is not registered.');
               }
@@ -460,7 +462,7 @@ client.on('message', async (msg) => {
       sendMessage(msg.channel, 'Invalid number of parameters. Usage: ' + args[0] + ' [name] [category]');
     }
 
-    msg.delete();
+    messageQueue.push({message: msg, expires: Date.now() + commandExpiry});
   } else if (args[0].toLowerCase() === '.signup') {
     let title = ffTitle;
     let lastFound;
@@ -564,7 +566,7 @@ client.on('message', async (msg) => {
       sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
     }
 
-    msg.delete();
+    messageQueue.push({message: msg, expires: Date.now() + commandExpiry});
   }
 });
 
