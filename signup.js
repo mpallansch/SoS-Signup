@@ -8,8 +8,14 @@ process.on('uncaughtException', function(err){
   console.log(err);
 });
 
-const ffTitle = 'Fortress Fight';
-const rrTitle = 'Reservoir Raid';
+const titleMapping = {
+  'ff': 'Fortress Fight',
+  'rr': 'Reservoir Raid',
+  'ss': 'State VS State',
+  'cc': 'Capitol Clash',
+  'tt': 'Trap Time',
+};
+const titles = Object.keys(titleMapping).map(key => titleMapping[key]);
 const embeds = {};
 const events = {
   'Fortress Fight': {
@@ -34,86 +40,33 @@ const events = {
     '✅': 'Participant',
     '⭕': 'Reservist',
     '❌': 'Unavailable'
+  },
+  'State VS State': {
+    '🇦': '9-10 UTC',
+    '🇧': '10-12 UTC',
+    '🇨': '12-14 UTC',
+    '🇩': '14-16 UTC',
+    '🇪': '16-18 UTC',
+    '🇫': '18-20 UTC',
+    '🇬': '20-22 UTC',
+    '🇭': '22-23 UTC'
+  },
+  'Capitol Clash': {
+    '🇦': '10-12 UTC',
+    '🇧': '12-14 UTC',
+    '🇨': '14-16 UTC',
+    '🇩': '16-18 UTC',
+    '🇪': '18-20 UTC',
+    '🇫': '20-22 UTC'
+  },
+  'Trap Time': {
+    '✅': 'Available',
+    '⭕': 'Unavailable'
   }
 };
 const keyLimitMapping = {
   '✅': 30,
   '⭕': 10,
-};
-const keyToTitleMapping = {
-  'A': 'Fortress Fight',
-  'B': 'Fortress Fight',
-  'C': 'Fortress Fight',
-  'D': 'Fortress Fight',
-  'E': 'Fortress Fight',
-  'F': 'Fortress Fight',
-  'G': 'Fortress Fight',
-  'H': 'Fortress Fight',
-  'I': 'Fortress Fight',
-  'J': 'Fortress Fight',
-  'K': 'Fortress Fight',
-  'L': 'Fortress Fight',
-  'a': 'Fortress Fight',
-  'b': 'Fortress Fight',
-  'c': 'Fortress Fight',
-  'd': 'Fortress Fight',
-  'e': 'Fortress Fight',
-  'f': 'Fortress Fight',
-  'g': 'Fortress Fight',
-  'h': 'Fortress Fight',
-  'i': 'Fortress Fight',
-  'j': 'Fortress Fight',
-  'k': 'Fortress Fight',
-  'l': 'Fortress Fight',
-  'B1': 'Fortress Fight',
-  'B2': 'Fortress Fight',
-  'B3': 'Fortress Fight',
-  'B4': 'Fortress Fight',
-  'B5': 'Fortress Fight',
-  'B6': 'Fortress Fight',
-  'B7': 'Fortress Fight',
-  'B8': 'Fortress Fight',
-  'B9': 'Fortress Fight',
-  'B10': 'Fortress Fight',
-  'B11': 'Fortress Fight',
-  'B12': 'Fortress Fight',
-  'b1': 'Fortress Fight',
-  'b2': 'Fortress Fight',
-  'b3': 'Fortress Fight',
-  'b4': 'Fortress Fight',
-  'b5': 'Fortress Fight',
-  'b6': 'Fortress Fight',
-  'b7': 'Fortress Fight',
-  'b8': 'Fortress Fight',
-  'b9': 'Fortress Fight',
-  'b10': 'Fortress Fight',
-  'b11': 'Fortress Fight',
-  'b12': 'Fortress Fight',
-  'f1': 'Fortress Fight',
-  'f2': 'Fortress Fight',
-  'f3': 'Fortress Fight',
-  'f4': 'Fortress Fight',
-  'F1': 'Fortress Fight',
-  'F2': 'Fortress Fight',
-  'F3': 'Fortress Fight',
-  'F4': 'Fortress Fight',
-  '1': 'Fortress Fight',
-  '2': 'Fortress Fight',
-  '3': 'Fortress Fight',
-  '4': 'Fortress Fight',
-  'V': 'Reservoir Raid',
-  'O': 'Reservoir Raid',
-  'X': 'Reservoir Raid',
-  'P': 'Reservoir Raid',
-  'R': 'Reservoir Raid',
-  'U': 'Reservoir Raid',
-  'v': 'Reservoir Raid',
-  'o': 'Reservoir Raid',
-  'x': 'Reservoir Raid',
-  'p': 'Reservoir Raid',
-  'r': 'Reservoir Raid',
-  'u': 'Reservoir Raid'
-
 };
 const keyMapping = {
   'A': '🇦',
@@ -198,7 +151,7 @@ let messageQueue = [];
 
 const removeEmbed = (channel, title) => {
   delete embeds[channel][title];
-  if(!embeds[channel][rrTitle] && !embeds[ffTitle]){
+  if(Object.keys(embeds[channel]) === 0){
     delete embeds[channel];
   }
 
@@ -268,6 +221,28 @@ const sendMessage = (channel, message, expiresAfter = responseExpiry) => {
     console.log('Error sending message');
   });
 };
+
+const getEmbedFromKey = (channelId, key) => {
+  let possibilities = [];
+
+  Object.keys(events).forEach(eventKey => {
+    if(events[eventKey][key] && embeds[channelId][eventKey]){
+      possibilities.push(embeds[channelId][eventKey]);
+    }
+  });
+
+  if(possibilities.length > 0){
+    let current = possibilities[0];
+
+    for(let i = 1; i < possibilities.length; i++){
+      if(!current.created && possibilities[i].created || current.created < possibilities[i].created){
+        current = possibilities[i];
+      }
+    }
+
+    return current;
+  }
+};
  
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
@@ -325,13 +300,13 @@ client.on('messageReactionAdd', async (react, author) => {
   let nickname = member.displayName;
 
   let embed;
-  let ffEmbed = embeds[channel][ffTitle];
-  let rrEmbed = embeds[channel][rrTitle];
-  if(ffEmbed && ffEmbed.message.id === react.message.id){
-    embed = ffEmbed;
-  } else if(rrEmbed && rrEmbed.message.id === react.message.id) {
-    embed = rrEmbed;
-  } else {
+  for(var i = 0; i < titles.length; i++){
+    if(embeds[channel][titles[i]] && embeds[channel][titles[i]].message.id === react.message.id){
+      embed = embeds[channel][titles[i]];
+      break;
+    }
+  }
+  if(!embed){
     return;
   }
 
@@ -377,13 +352,13 @@ client.on('messageReactionRemove', async (react, author) => {
   let nickname = member.displayName;
 
   let embed;
-  let ffEmbed = embeds[channel][ffTitle];
-  let rrEmbed = embeds[channel][rrTitle];
-  if(ffEmbed && ffEmbed.message.id === react.message.id){
-    embed = ffEmbed;
-  } else if(rrEmbed && rrEmbed.message.id === react.message.id) {
-    embed = rrEmbed;
-  } else {
+  for(var i = 0; i < titles.length; i++){
+    if(embeds[channel][titles[i]] && embeds[channel][titles[i]].message.id === react.message.id){
+      embed = embeds[channel][titles[i]];
+      break;
+    }
+  }
+  if(!embed){
     return;
   }
 
@@ -407,56 +382,51 @@ client.on('message', async (msg) => {
 
   if (args[0].toLowerCase() === '.add' || args[0].toLowerCase() === '.remove'){
     if(args.length >= 3){
-      let embedTitle = keyToTitleMapping[args[args.length - 1]] || keyToTitleMapping[args[args.length - 1].toLowerCase()];
-      if(embedTitle){
-        if(embeds[msg.channel.id] && embeds[msg.channel.id][embedTitle]){
-          let embed = embeds[msg.channel.id][embedTitle];
-          let key = keyMapping[args[args.length - 1]] || keyMapping[args[args.length - 1].toLowerCase()] || args[args.length - 1];
-            
-          let allNames = '';
-          for(var i = 1; i < args.length - 1; i++){
-            allNames += args[i] + ' ';
+      let key = keyMapping[args[args.length - 1]] || keyMapping[args[args.length - 1].toLowerCase()] || args[args.length - 1];
+      let embed = getEmbedFromKey(msg.channel.id, key);
+
+      if(embed){
+        let allNames = '';
+        for(var i = 1; i < args.length - 1; i++){
+          allNames += args[i] + ' ';
+        }
+        let allNamesArray = allNames.split(',');
+        for(var i = 0; i < allNamesArray.length; i++){
+          let name = allNamesArray[i].trim();
+
+          let member, nickname;
+          if(name.indexOf('<@') === 0 && name.indexOf('>') === (name.length - 1)){
+            member = await msg.guild.members.fetch(name.substring(2, name.length - 1).replace(/\!/g,''));
+            nickname = member.displayName;
           }
-          let allNamesArray = allNames.split(',');
-          for(var i = 0; i < allNamesArray.length; i++){
-            let name = allNamesArray[i].trim();
 
-            let member, nickname;
-            if(name.indexOf('<@') === 0 && name.indexOf('>') === (name.length - 1)){
-              member = await msg.guild.members.fetch(name.substring(2, name.length - 1).replace(/\!/g,''));
-              nickname = member.displayName;
-            }
-
-            if(args[0] === '.add'){
-              if(!violatesUserLimit(embed, name)){
-                if(!violatesCategoryLimit(embed, key)){
-                  embed.signedUp[key] = embed.signedUp[key] || [];
-                  embed.signedUp[key].push(nickname || name);
-                } else {
-                  sendMessage(msg.channel, 'Adding user would exceed category limit.');
-                }
+          if(args[0] === '.add'){
+            if(!violatesUserLimit(embed, name)){
+              if(!violatesCategoryLimit(embed, key)){
+                embed.signedUp[key] = embed.signedUp[key] || [];
+                embed.signedUp[key].push(nickname || name);
               } else {
-                sendMessage(msg.channel, 'Adding user would exceed limit.');
+                sendMessage(msg.channel, 'Adding user would exceed category limit.');
               }
             } else {
-              if(embed.signedUp[key] && embed.signedUp[key].indexOf(nickname || name) !== -1){
-                embed.signedUp[key] = embed.signedUp[key].filter(user => user !== (nickname || name));
-              } else {
-                sendMessage(msg.channel, 'User is not registered.');
-              }
+              sendMessage(msg.channel, 'Adding user would exceed limit.');
+            }
+          } else {
+            if(embed.signedUp[key] && embed.signedUp[key].indexOf(nickname || name) !== -1){
+              embed.signedUp[key] = embed.signedUp[key].filter(user => user !== (nickname || name));
+            } else {
+              sendMessage(msg.channel, 'User is not registered.');
             }
           }
-           
-          try {
-            embed.message.edit(renderEmbed(embed, msg.channel.id));
-          } catch(e) {
-            sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
-          }
-        } else {
-          sendMessage(msg.channel, 'Unable to find signup running in this channel. Create one before adding users.');
+        }
+        
+        try {
+          embed.message.edit(renderEmbed(embed, msg.channel.id));
+        } catch(e) {
+          sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
         }
       } else {
-        sendMessage(msg.channel, 'Unable to map category ' + args[args.length - 1] + ' to an event signup.');
+        sendMessage('Unable to find signup running in this channel with provided category ' + key);
       }
     } else {
       sendMessage(msg.channel, 'Invalid number of parameters. Usage: ' + args[0] + ' [name] [category]');
@@ -464,20 +434,18 @@ client.on('message', async (msg) => {
 
     messageQueue.push({message: msg, expires: Date.now() + commandExpiry});
   } else if (args[0].toLowerCase() === '.signup') {
-    let title = ffTitle;
+    let title = titles[0];
     let lastFound;
     let customTitle;
     let limit;
     let restriction;
 
     if(args.length > 1 && typeof args[1] === 'string') {
-      switch(args[1].toLowerCase()){
-        case 'rr':
-          title = rrTitle;
-          break;
-        case 'help':
-          msg.reply('Welcome to State of Survival Sign Up Bot. We currently support the following commands:\n\tff: Creates a signup for for Fortress Fight event (this is the default if no event is specified)\n\trr: Creates a signup for Reservoir Raid event\n\nIn addition we support the following flags:\n\tlimit=[number]: Sets the number of event fields that each user is limited to.\n\nFor more information, visit our official Discord server: https://discord.gg/KZXQ5ycR');
-          return;
+      if(titleMapping[args[1].toLowerCase()]){
+        title = titleMapping[args[1].toLowerCase()];
+      } else {
+        msg.reply('Welcome to State of Survival Sign Up Bot. We currently support the following commands:\n\tff: Fortress Fight (this is the default if no event is specified)\n\trr: Reservoir Raid\n\tss: State vs. State\n\tcc: Capitol Clash\n\ttt: Trap Time\n\nIn addition we support the following flags:\n\tlimit=[number]: Sets the number of event fields that each user is limited to.\n\trestrict=[categories, comma separated]: Restricts the signup to certain categories\n\ttext=[Header text]: Specifies text that should be shown in the header of the signup\n\nFor more information, visit our official Discord server: https://discord.gg/N63WZFrp');
+        return;
       }
 
       for(let i = 1; i < args.length; i++){
@@ -540,7 +508,7 @@ client.on('message', async (msg) => {
     }
 
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
-    embeds[msg.channel.id][title] = {title: title, closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
+    embeds[msg.channel.id][title] = {created: Date.now(), title: title, closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
 
     const signup = renderEmbed(embeds[msg.channel.id][title], msg.channel.id);
    
