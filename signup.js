@@ -11,8 +11,8 @@ process.on('uncaughtException', function(err){
 const titleMapping = {
   'ff': 'Fortress Fight',
   'rr': 'Reservoir Raid',
-  'ss': 'State VS State',
-  'cc': 'Capitol Clash',
+  'svs': 'State VS State',
+  'cc': 'Capital Clash',
   'tt': 'Trap Time',
 };
 const titles = Object.keys(titleMapping).map(key => titleMapping[key]);
@@ -43,21 +43,33 @@ const events = {
   },
   'State VS State': {
     '🇦': '9-10 UTC',
-    '🇧': '10-12 UTC',
-    '🇨': '12-14 UTC',
-    '🇩': '14-16 UTC',
-    '🇪': '16-18 UTC',
-    '🇫': '18-20 UTC',
-    '🇬': '20-22 UTC',
-    '🇭': '22-23 UTC'
+    '🇧': '10-11 UTC',
+    '🇨': '11-12 UTC',
+    '🇩': '12-13 UTC',
+    '🇪': '13-14 UTC',
+    '🇫': '14-15 UTC',
+    '🇬': '15-16 UTC',
+    '🇭': '16-17 UTC',
+    '🇮': '17-18 UTC',
+    '🇯': '18-19 UTC',
+    '🇰': '19-20 UTC',
+    '🇱': '20-21 UTC',
+    '🇲': '21-22 UTC',
+    '🇳': '22-23 UTC'
   },
-  'Capitol Clash': {
-    '🇦': '10-12 UTC',
-    '🇧': '12-14 UTC',
-    '🇨': '14-16 UTC',
-    '🇩': '16-18 UTC',
-    '🇪': '18-20 UTC',
-    '🇫': '20-22 UTC'
+  'Capital Clash': {
+    '🇦': '10-11 UTC',
+    '🇧': '11-12 UTC',
+    '🇨': '12-13 UTC',
+    '🇩': '13-14 UTC',
+    '🇪': '14-15 UTC',
+    '🇫': '15-16 UTC',
+    '🇬': '16-17 UTC',
+    '🇭': '17-18 UTC',
+    '🇮': '18-19 UTC',
+    '🇯': '19-20 UTC',
+    '🇰': '20-21 UTC',
+    '🇱': '21-22 UTC'
   },
   'Trap Time': {
     '✅': 'Available',
@@ -81,6 +93,8 @@ const keyMapping = {
   'J': '🇯',
   'K': '🇰',
   'L': '🇱',
+  'M': '🇲',
+  'N': '🇳',
   'a': '🇦',
   'b': '🇧',
   'c': '🇨',
@@ -93,6 +107,8 @@ const keyMapping = {
   'j': '🇯',
   'k': '🇰',
   'l': '🇱',
+  'm': '🇲',
+  'n': '🇳',
   'B1': '🇦',
   'B2': '🇧',
   'B3': '🇨',
@@ -163,36 +179,62 @@ const removeEmbed = (channel, title) => {
 };
 
 const renderEmbed = (embed, channel) => {
-  let description = '';
-  (embed.restriction || Object.keys(events[embed.title])).forEach((key) => {
-    description += key + ': ' + events[embed.title][key] + (keyLimitMapping[key] ? (' ' + (embed.signedUp[key] ? embed.signedUp[key].length : 0) + '/' + keyLimitMapping[key]) : '');
-    if(embed.signedUp[key] && embed.signedUp[key].length > 0){
-      description += '​\n```\n';
-      embed.signedUp[key].forEach((user) => {
-        description += user + '\n';
-      });
-      description += '```\n';
-    } else { 
-      description += '\n```\n​                                   \n```\n';
-    }
-  });
-
-  if(embed.closed){
-    removeEmbed(channel, embed.title);
-  } else {
-    let dbEmbed = {...embed};
-    dbEmbed.message = dbEmbed.message ? dbEmbed.message.id : undefined;
-    fs.writeFileSync(`${config.dbPath}${config.dbPrefix}${channel}-${embed.title}.json`, JSON.stringify(dbEmbed), {flag: 'w'});
-  }
-  
-  return new Discord.MessageEmbed()
+  let newEmbed = new Discord.MessageEmbed()
     .setColor('#0099ff')
-    .setTitle((embed.customTitle || (embed.title + ' Signup')) + ' | Status: ' + (embed.closed ? 'Closed' : 'Running'))
-    .setDescription(description);
+    .setTitle((embed.customTitle || (embed.title + ' Signup')) + ' | Status: ' + (embed.closed ? 'Closed' : 'Running'));
+
+  if(embed.title !== 'State VS State' && embed.title !== 'Capital Clash'){
+    let description = '';
+    (embed.restriction || Object.keys(events[embed.title])).forEach((key) => {
+      description += key + ': ' + events[embed.title][key] + ((embed.title !== 'Trap Time' && keyLimitMapping[key]) ? (' ' + (embed.signedUp[key] ? embed.signedUp[key].length : 0) + '/' + keyLimitMapping[key]) : '');
+      if(embed.signedUp[key] && embed.signedUp[key].length > 0){
+        description += '​\n```\n';
+        embed.signedUp[key].forEach((user) => {
+          description += user + '\n';
+        });
+        description += '```\n';
+      } else { 
+        description += '\n```\n​                                   \n```\n';
+      }
+    });
+
+    if(embed.closed){
+      removeEmbed(channel, embed.title);
+    } else {
+      let dbEmbed = {...embed};
+      dbEmbed.message = dbEmbed.message ? dbEmbed.message.id : undefined;
+      fs.writeFileSync(`${config.dbPath}${config.dbPrefix}${channel}-${embed.title}.json`, JSON.stringify(dbEmbed), {flag: 'w'});
+    }
+
+    newEmbed.setDescription(description);
+  } else {
+    (embed.restriction || Object.keys(events[embed.title])).forEach((key, index) => {
+      let inline = embed.title === 'Capital Clash' ? true : (index >= 1 && index <= 13);
+
+      let fieldValue = '';
+      if(embed.signedUp[key] && embed.signedUp[key].length > 0){
+        fieldValue += '```\n';
+        embed.signedUp[key].forEach((user) => {
+          fieldValue += user + '\n';
+        });
+        fieldValue += '```';
+      } else { 
+        fieldValue += '```\n​                  ' + (inline ? '' : '                 ') + '\n```';
+      }
+
+      newEmbed.addField(
+        key + ': ' + events[embed.title][key] + ((embed.title !== 'Trap Time' && keyLimitMapping[key]) ? (' ' + (embed.signedUp[key] ? embed.signedUp[key].length : 0) + '/' + keyLimitMapping[key]) : ''),
+        fieldValue, 
+        inline
+      );
+    });
+  }
+
+  return newEmbed;
 };
 
 const violatesCategoryLimit = (embed, key) => {
-  if(keyLimitMapping[key] && embed.signedUp[key] && embed.signedUp[key].length === keyLimitMapping[key]){
+  if(embed.title !== 'Trap Time' && keyLimitMapping[key] && embed.signedUp[key] && embed.signedUp[key].length === keyLimitMapping[key]){
     return true;
   }
   return false;
@@ -215,11 +257,13 @@ const violatesUserLimit = (embed, nickname) => {
 };
 
 const sendMessage = (channel, message, expiresAfter = responseExpiry) => {
-  channel.send(message).then((msg) => {
-    messageQueue.push({message: msg, expires: Date.now() + expiresAfter});
-  }).catch(() => {
-    console.log('Error sending message');
-  });
+  if(channel && channel.send){
+    channel.send(message).then((msg) => {
+      messageQueue.push({message: msg, expires: Date.now() + expiresAfter});
+    }).catch(() => {
+      console.log('Error sending message');
+    });
+  }
 };
 
 const getEmbedFromKey = (channelId, key) => {
@@ -423,10 +467,11 @@ client.on('message', async (msg) => {
         try {
           embed.message.edit(renderEmbed(embed, msg.channel.id));
         } catch(e) {
+          console.log(e);
           sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
         }
       } else {
-        sendMessage('Unable to find signup running in this channel with provided category ' + key);
+        sendMessage(msg.channel, 'Unable to find signup running in this channel with provided category ' + key);
       }
     } else {
       sendMessage(msg.channel, 'Invalid number of parameters. Usage: ' + args[0] + ' [name] [category]');
@@ -444,7 +489,7 @@ client.on('message', async (msg) => {
       if(titleMapping[args[1].toLowerCase()]){
         title = titleMapping[args[1].toLowerCase()];
       } else {
-        msg.reply('Welcome to State of Survival Sign Up Bot. We currently support the following commands:\n\tff: Fortress Fight (this is the default if no event is specified)\n\trr: Reservoir Raid\n\tss: State vs. State\n\tcc: Capitol Clash\n\ttt: Trap Time\n\nIn addition we support the following flags:\n\tlimit=[number]: Sets the number of event fields that each user is limited to.\n\trestrict=[categories, comma separated]: Restricts the signup to certain categories\n\ttext=[Header text]: Specifies text that should be shown in the header of the signup\n\nFor more information, visit our official Discord server: https://discord.gg/N63WZFrp');
+        msg.reply('Welcome to State of Survival Sign Up Bot. We currently support the following commands:\n\tff: Fortress Fight (this is the default if no event is specified)\n\trr: Reservoir Raid\n\tsvs: State vs. State\n\tcc: Capital Clash\n\ttt: Trap Time\n\nIn addition we support the following flags:\n\tlimit=[number]: Sets the number of event fields that each user is limited to.\n\trestrict=[categories, comma separated]: Restricts the signup to certain categories\n\ttext=[Header text]: Specifies text that should be shown in the header of the signup\n\nFor more information, visit our official Discord server: https://discord.gg/zcY9DsdKp9');
         return;
       }
 
