@@ -38,24 +38,25 @@ const events = {
   },
   'Reservoir Raid': {
     '✅': 'Participant',
-    '⭕': 'Reservist',
+    '🚩': 'Reservist',
     '❌': 'Unavailable'
   },
   'State VS State': {
-    '🇦': '9-10 UTC',
-    '🇧': '10-11 UTC',
-    '🇨': '11-12 UTC',
-    '🇩': '12-13 UTC',
-    '🇪': '13-14 UTC',
-    '🇫': '14-15 UTC',
-    '🇬': '15-16 UTC',
-    '🇭': '16-17 UTC',
-    '🇮': '17-18 UTC',
-    '🇯': '18-19 UTC',
-    '🇰': '19-20 UTC',
-    '🇱': '20-21 UTC',
-    '🇲': '21-22 UTC',
-    '🇳': '22-23 UTC'
+    '🇦': '8-9 UTC',
+    '🇧': '9-10 UTC',
+    '🇨': '10-11 UTC',
+    '🇩': '11-12 UTC',
+    '🇪': '12-13 UTC',
+    '🇫': '13-14 UTC',
+    '🇬': '14-15 UTC',
+    '🇭': '15-16 UTC',
+    '🇮': '16-17 UTC',
+    '🇯': '17-18 UTC',
+    '🇰': '18-19 UTC',
+    '🇱': '19-20 UTC',
+    '🇲': '20-21 UTC',
+    '🇳': '21-22 UTC',
+    '🇴': '22-23 UTC'
   },
   'Capital Clash': {
     '🇦': '10-11 UTC',
@@ -73,12 +74,12 @@ const events = {
   },
   'Trap Time': {
     '✅': 'Available',
-    '⭕': 'Unavailable'
+    '❌': 'Unavailable'
   }
 };
 const keyLimitMapping = {
   '✅': 30,
-  '⭕': 10,
+  '🚩': 10,
 };
 const keyMapping = {
   'A': '🇦',
@@ -95,6 +96,7 @@ const keyMapping = {
   'L': '🇱',
   'M': '🇲',
   'N': '🇳',
+  'O': '🇴',
   'a': '🇦',
   'b': '🇧',
   'c': '🇨',
@@ -109,6 +111,7 @@ const keyMapping = {
   'l': '🇱',
   'm': '🇲',
   'n': '🇳',
+  'o': '🇴',
   'B1': '🇦',
   'B2': '🇧',
   'B3': '🇨',
@@ -146,16 +149,14 @@ const keyMapping = {
   'F3': '3️⃣',
   'F4': '4️⃣',
   'V': '✅',
-  'O': '⭕',
   'X': '❌',
   'P': '✅',
-  'R': '⭕',
+  'R': '🚩',
   'U': '❌',
   'v': '✅',
-  'o': '⭕',
   'x': '❌',
   'p': '✅',
-  'r': '⭕',
+  'r': '🚩',
   'u': '❌'
 };
 
@@ -209,7 +210,7 @@ const renderEmbed = (embed, channel) => {
     newEmbed.setDescription(description);
   } else {
     (embed.restriction || Object.keys(events[embed.title])).forEach((key, index) => {
-      let inline = embed.title === 'Capital Clash' ? true : (index >= 1 && index <= 13);
+      let inline = embed.title === 'Capital Clash' ? true : (index >= 2 && index <= 13);
 
       let fieldValue = '';
       if(embed.signedUp[key] && embed.signedUp[key].length > 0){
