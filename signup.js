@@ -16,7 +16,6 @@ const titleMapping = {
   'tt': 'Trap Time',
 };
 const titles = Object.keys(titleMapping).map(key => titleMapping[key]);
-const embeds = {};
 const events = {
   'Fortress Fight': {
     '🇦': 'Bunker 1',
@@ -157,13 +156,37 @@ const keyMapping = {
   'x': '❌',
   'p': '✅',
   'r': '🚩',
-  'u': '❌'
+  'u': '❌',
+  1: '1️⃣',
+  2: '2️⃣',
+  3: '3️⃣',
+  4: '4️⃣',
+  5: '5️⃣',
+  6: '6️⃣',
+  7: '7️⃣',
+  8: '8️⃣',
+  9: '9️⃣',
+  10: '🔟'
+};
+const reverseKeyMapping = {
+  '1️⃣': 0,
+  '2️⃣': 1,
+  '3️⃣': 2,
+  '4️⃣': 3,
+  '5️⃣': 4,
+  '6️⃣': 5,
+  '7️⃣': 6,
+  '8️⃣': 7,
+  '9️⃣': 8,
+  '🔟': 9
 };
 
 const expireCheckInterval = 2000;
 const commandExpiry = 30000;
 const responseExpiry = 60000;
 
+let embeds = {};
+let roleEmbeds = {};
 let messageQueue = [];
 
 const removeEmbed = (channel, title) => {
@@ -288,6 +311,126 @@ const getEmbedFromKey = (channelId, key) => {
     return current;
   }
 };
+
+const sendRoleEmbed = (originalEmbed, channel, user, roles, category, action) => {
+  let embed = new Discord.MessageEmbed()
+    .setColor('#0099ff')
+    .setDescription('SoS Signup Alliance Select | <@' + user + '>')
+    .setTitle('You have multiple possible alliance roles. Please select from the list below.');
+
+    roles.forEach((role, i) => {
+      embed.addField(keyMapping[(i + 1)], role, true);
+    });
+
+  try {
+    channel.send(embed).then((msgRef) => {
+      roleEmbeds[msgRef.id] = {originalEmbed, roles, user, category, action};
+      let promises = roles.map((r, i) => msgRef.react(keyMapping[(i + 1)]));
+    
+      Promise.all(promises)
+        .catch(() => console.error('One of the emojis failed to react.'));
+    });
+  } catch(e) {
+    console.log('Message failed to send');
+  }
+};
+
+const getReactionInfo = async (react, author, action) => {
+  if (react.message.partial) await react.message.fetch();
+
+  let channel = react.message.channel;
+
+  if(author.bot || !embeds[channel.id]){
+    return {};
+  }
+
+  let member = await react.message.guild.members.fetch(author);
+  let nickname = member.displayName;
+  let role;
+
+  if(roleEmbeds[react.message.id]){
+    return {nickname, member, channel, embed: {id: react.message.id, type: 'role', info: roleEmbeds[react.message.id]}};
+  }
+
+  let embed;
+  for(var i = 0; i < titles.length; i++){
+    if(embeds[channel.id][titles[i]] && embeds[channel.id][titles[i]].message.id === react.message.id){
+      embed = embeds[channel.id][titles[i]];
+      break;
+    }
+  }
+  if(!embed){
+    return {};
+  }
+
+  if(embed.role){
+    if(!member.roles.cache){
+      await react.message.guild.roles.fetch();
+    }
+
+    if(member.roles.cache) {
+      let roles = member.roles.cache
+      .filter(r => {if(r.name.length === 3 && (action !== 'remove' || embed.signedUp[react.emoji.name].indexOf(r.name) !== -1)) return true})
+      .map(r => r.name).slice(0,10);
+
+      if(roles.length > 1){
+        sendRoleEmbed(embed, channel, member, roles, react.emoji.name, action);
+        return {};
+      } else if(roles.length === 1) {
+        role = roles[0];
+      }
+    }
+  }
+
+  return {member, role, nickname, embed, channel};
+};
+
+const addToCategory = (embed, toAdd, category, channel, author, isAdmin) => {
+  if(category === '🔚' && (author.id === embed.author || isAdmin)){
+    embed.closed = true;
+
+    try {
+      embed.message.edit(renderEmbed(embed, channel.id)).then(() => {
+        
+      });
+    } catch(e) {
+      sendMessage(channel, 'Error. Please check bot permissions and try again.');
+    }
+  } else if(events[embed.title][category] && !embed.closed) {
+    if(violatesUserLimit(embed, toAdd)){
+      sendMessage(channel, '<@' + author.id  + '> You have exceeded your signup limit');
+      return;
+    }
+    if(violatesCategoryLimit(embed, category)){
+      sendMessage(channel, 'Category has reached the limit.');
+      return;
+    }
+
+    embed.signedUp[category] = embed.signedUp[category] || [];
+    embed.signedUp[category].push(toAdd);
+    try {
+      embed.message.edit(renderEmbed(embed, channel.id));
+    } catch(e) {
+      sendMessage(channel, 'Error. Please check bot permissions and try again.');
+    }
+  }
+};
+
+const removeFromCategory = (embed, toRemove, category, channel, author, isAdmin) => {
+  if(embed.signedUp[category]){
+    if(category === '🔚' && (author.id === embed.author || isAdmin)){
+      embed.closed = false;
+    } else if(events[embed.title][category] && !embed.closed) {
+      embed.signedUp[category] = embed.signedUp[category].filter(user => user !== toRemove);
+    }
+    
+    try {
+      embed.message.edit(renderEmbed(embed, channel.id));
+    } catch(e) {
+      sendMessage(channel, 'Error. Please check bot permissions and try again.');
+    }
+  }
+};
  
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
@@ -333,93 +476,33 @@ client.on('ready', () => {
 });
 
 client.on('messageReactionAdd', async (react, author) => {
-  if (react.message.partial) await react.message.fetch();
+  const { role, embed, member, nickname, channel } = await getReactionInfo(react, author, 'add');
 
-  let channel = react.message.channel.id;
-
-  if(author.bot || !embeds[channel]){
+  if(!embed) {
     return;
   }
 
-  let member = await react.message.guild.members.fetch(author);
-  let nickname = member.displayName;
-
-  let embed;
-  for(var i = 0; i < titles.length; i++){
-    if(embeds[channel][titles[i]] && embeds[channel][titles[i]].message.id === react.message.id){
-      embed = embeds[channel][titles[i]];
-      break;
+  if(embed.type === 'role') {
+    if(embed.info.action === 'add'){
+      addToCategory(embed.info.originalEmbed, embed.info.roles[reverseKeyMapping[react.emoji.name]],  embed.info.category, channel, author, member.hasPermission("ADMINISTRATOR"));
+    } else {
+      removeFromCategory(embed.info.originalEmbed, embed.info.roles[reverseKeyMapping[react.emoji.name]],  embed.info.category, channel, author, member.hasPermission("ADMINISTRATOR"));
     }
-  }
-  if(!embed){
-    return;
-  }
-
-  if(react.emoji.name === '🔚' && (author.id === embed.author || member.hasPermission("ADMINISTRATOR"))){
-    embed.closed = true;
-
-    try {
-      embed.message.edit(renderEmbed(embed, channel)).then(() => {
-        
-      });
-    } catch(e) {
-      sendMessage(react.message.channel, 'Error. Please check bot permissions and try again.');
-    }
-  } else if(events[embed.title][react.emoji.name] && !embed.closed) {
-    if(violatesUserLimit(embed, nickname)){
-      sendMessage(react.message.channel, '<@' + author.id  + '> You have exceeded your signup limit');
-      return;
-    }
-    if(violatesCategoryLimit(embed, react.emoji.name)){
-      sendMessage(react.message.channel, 'Category has reached the limit.');
-      return;
-    }
-
-    embed.signedUp[react.emoji.name] = embed.signedUp[react.emoji.name] || [];
-    embed.signedUp[react.emoji.name].push(nickname);
-    try {
-      embed.message.edit(renderEmbed(embed, channel));
-    } catch(e) {
-      sendMessage(react.message.channel, 'Error. Please check bot permissions and try again.');
-    }
+    delete roleEmbeds[embed.id];
+    react.message.delete();
+  } else {
+    addToCategory(embed, (role || nickname), react.emoji.name, channel, author, member.hasPermission("ADMINISTRATOR"));
   }
 });
 
 client.on('messageReactionRemove', async (react, author) => {
-  if (react.message.partial) await react.message.fetch();
-  let channel = react.message.channel.id;
+  const { role, embed, member, nickname, channel } = await getReactionInfo(react, author, 'remove');
 
-  if(author.bot || !embeds[channel]){
+  if(!embed) {
     return;
   }
 
-  let member = await react.message.guild.members.fetch(author);
-  let nickname = member.displayName;
-
-  let embed;
-  for(var i = 0; i < titles.length; i++){
-    if(embeds[channel][titles[i]] && embeds[channel][titles[i]].message.id === react.message.id){
-      embed = embeds[channel][titles[i]];
-      break;
-    }
-  }
-  if(!embed){
-    return;
-  }
-
-  if(embed.signedUp[react.emoji.name]){
-    if(react.emoji.name === '🔚' && (author.id === embed.author || member.hasPermission("ADMINISTRATOR"))){
-      embed.closed = false;
-    } else if(events[embed.title][react.emoji.name] && !embed.closed) {
-      embed.signedUp[react.emoji.name] = embed.signedUp[react.emoji.name].filter(user => user !== nickname);
-    }
-    
-    try {
-      embed.message.edit(renderEmbed(embed, channel));
-    } catch(e) {
-      sendMessage(react.message.channel, 'Error. Please check bot permissions and try again.');
-    }
-  }
+  removeFromCategory(embed, (role || nickname), react.emoji.name, channel, author, member.hasPermission("ADMINISTRATOR"));
 });
  
 client.on('message', async (msg) => {
@@ -481,6 +564,7 @@ client.on('message', async (msg) => {
     messageQueue.push({message: msg, expires: Date.now() + commandExpiry});
   } else if (args[0].toLowerCase() === '.signup') {
     let title = titles[0];
+    let role = false;
     let lastFound;
     let customTitle;
     let limit;
@@ -503,6 +587,12 @@ client.on('message', async (msg) => {
             if(!isNaN(limitNum)){
               limit = limitNum;
             }
+          }
+        } else if(args[i].toLowerCase().indexOf('role=') === 0){
+          let tokens = args[i].split('=');
+          lastFound = undefined;
+          if(tokens.length > 1 && tokens[1] === 'true'){
+            role = true;
           }
         } else if(args[i].toLowerCase().indexOf('restrict=') === 0) {
           let tokens = args[i].split('=');
@@ -554,7 +644,7 @@ client.on('message', async (msg) => {
     }
 
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
-    embeds[msg.channel.id][title] = {created: Date.now(), title: title, closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
+    embeds[msg.channel.id][title] = {created: Date.now(), title: title, role: (title === 'Fortress Fight' || role), closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
 
     const signup = renderEmbed(embeds[msg.channel.id][title], msg.channel.id);
    
