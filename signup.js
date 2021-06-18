@@ -324,8 +324,9 @@ const sendRoleEmbed = (originalEmbed, channel, user, roles, category, action) =>
 
   try {
     channel.send(embed).then((msgRef) => {
-      roleEmbeds[msgRef.id] = {originalEmbed, roles, user, category, action};
+      roleEmbeds[msgRef.id] = {originalEmbed, roles, user, category, action, selected: []};
       let promises = roles.map((r, i) => msgRef.react(keyMapping[(i + 1)]));
+      promises.push(msgRef.react('✅'));
     
       Promise.all(promises)
         .catch(() => console.error('One of the emojis failed to react.'));
@@ -483,13 +484,19 @@ client.on('messageReactionAdd', async (react, author) => {
   }
 
   if(embed.type === 'role') {
-    if(embed.info.action === 'add'){
-      addToCategory(embed.info.originalEmbed, embed.info.roles[reverseKeyMapping[react.emoji.name]],  embed.info.category, channel, author, member.hasPermission("ADMINISTRATOR"));
+    if(react.emoji.name === '✅'){
+      roleEmbeds[embed.id].selected.forEach((selectedRole) => {
+        if(embed.info.action === 'add'){
+          addToCategory(embed.info.originalEmbed, selectedRole,  embed.info.category, channel, author, member.hasPermission("ADMINISTRATOR"));
+        } else {
+          removeFromCategory(embed.info.originalEmbed, selectedRole,  embed.info.category, channel, author, member.hasPermission("ADMINISTRATOR"));
+        }
+      });
+      delete roleEmbeds[embed.id];
+      react.message.delete();
     } else {
-      removeFromCategory(embed.info.originalEmbed, embed.info.roles[reverseKeyMapping[react.emoji.name]],  embed.info.category, channel, author, member.hasPermission("ADMINISTRATOR"));
+      roleEmbeds[embed.id].selected.push(embed.info.roles[reverseKeyMapping[react.emoji.name]]);
     }
-    delete roleEmbeds[embed.id];
-    react.message.delete();
   } else {
     addToCategory(embed, (role || nickname), react.emoji.name, channel, author, member.hasPermission("ADMINISTRATOR"));
   }
