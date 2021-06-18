@@ -16,6 +16,7 @@ const titleMapping = {
   'tt': 'Trap Time',
 };
 const titles = Object.keys(titleMapping).map(key => titleMapping[key]);
+titles.push('Custom');
 const events = {
   'Fortress Fight': {
     '🇦': 'Bunker 1',
@@ -180,6 +181,7 @@ const reverseKeyMapping = {
   '9️⃣': 8,
   '🔟': 9
 };
+const customKeys = ['🇦','🇧','🇨','🇩','🇪','🇫','🇬','🇭','🇮','🇯','🇰','🇱','🇲','🇳','🇴','🇵','🇶','🇷','🇸','🇹','🇺','🇻','🇼','🇽','🇾','🇿','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
 
 const expireCheckInterval = 2000;
 const commandExpiry = 30000;
@@ -209,8 +211,8 @@ const renderEmbed = (embed, channel) => {
 
   if(embed.title !== 'State VS State' && embed.title !== 'Capital Clash'){
     let description = '';
-    (embed.restriction || Object.keys(events[embed.title])).forEach((key) => {
-      description += key + ': ' + events[embed.title][key] + ((embed.title !== 'Trap Time' && keyLimitMapping[key]) ? (' ' + (embed.signedUp[key] ? embed.signedUp[key].length : 0) + '/' + keyLimitMapping[key]) : '');
+    (embed.restriction || Object.keys(embed.customCategories || events[embed.title])).forEach((key) => {
+      description += key + ': ' + (embed.customCategories || events[embed.title])[key] + ((embed.title !== 'Trap Time' && keyLimitMapping[key]) ? (' ' + (embed.signedUp[key] ? embed.signedUp[key].length : 0) + '/' + keyLimitMapping[key]) : '');
       if(embed.signedUp[key] && embed.signedUp[key].length > 0){
         description += '​\n```\n';
         embed.signedUp[key].forEach((user) => {
@@ -298,6 +300,10 @@ const getEmbedFromKey = (channelId, key) => {
       possibilities.push(embeds[channelId][eventKey]);
     }
   });
+
+  if(customKeys.indexOf(key) !== -1 && embeds[channelId]['Custom']){
+    possibilities.push(embeds[channelId]['Custom']);
+  }
 
   if(possibilities.length > 0){
     let current = possibilities[0];
@@ -397,7 +403,7 @@ const addToCategory = (embed, toAdd, category, channel, author, isAdmin) => {
     } catch(e) {
       sendMessage(channel, 'Error. Please check bot permissions and try again.');
     }
-  } else if(events[embed.title][category] && !embed.closed) {
+  } else if((embed.customCategories || events[embed.title])[category] && !embed.closed) {
     if(violatesUserLimit(embed, toAdd)){
       sendMessage(channel, '<@' + author.id  + '> You have exceeded your signup limit');
       return;
@@ -421,7 +427,7 @@ const removeFromCategory = (embed, toRemove, category, channel, author, isAdmin)
   if(embed.signedUp[category]){
     if(category === '🔚' && (author.id === embed.author || isAdmin)){
       embed.closed = false;
-    } else if(events[embed.title][category] && !embed.closed) {
+    } else if((embed.customCategories || events[embed.title])[category] && !embed.closed) {
       embed.signedUp[category] = embed.signedUp[category].filter(user => user !== toRemove);
     }
     
@@ -573,6 +579,7 @@ client.on('message', async (msg) => {
     let title = titles[0];
     let role = false;
     let lastFound;
+    let customCategories;
     let customTitle;
     let limit;
     let restriction;
@@ -580,12 +587,16 @@ client.on('message', async (msg) => {
     if(args.length > 1 && typeof args[1] === 'string') {
       if(titleMapping[args[1].toLowerCase()]){
         title = titleMapping[args[1].toLowerCase()];
+      } else if(args[1].toLowerCase().indexOf('custom=') === 0 && args[1].length > 7) {
+        title = 'Custom';
+        lastFound = 'customCategory';
+        customCategories = args[1].split('=')[1].split(',');
       } else {
         msg.reply('Welcome to State of Survival Sign Up Bot. We currently support the following commands:\n\tff: Fortress Fight (this is the default if no event is specified)\n\trr: Reservoir Raid\n\tsvs: State vs. State\n\tcc: Capital Clash\n\ttt: Trap Time\n\nIn addition we support the following flags:\n\tlimit=[number]: Sets the number of event fields that each user is limited to.\n\trestrict=[categories, comma separated]: Restricts the signup to certain categories\n\ttext=[Header text]: Specifies text that should be shown in the header of the signup\n\nFor more information, visit our official Discord server: https://discord.gg/zcY9DsdKp9');
         return;
       }
 
-      for(let i = 1; i < args.length; i++){
+      for(let i = 2; i < args.length; i++){
         if(args[i].toLowerCase().indexOf('limit=') === 0) {
           let tokens = args[i].split('=');
           lastFound = undefined;
@@ -622,6 +633,12 @@ client.on('message', async (msg) => {
           if(tokens.length > 1){
             customTitle = tokens[1];
           }
+        } else if(lastFound === 'customCategory'){
+          let tokens = args[i].split(',');
+          customCategories[customCategories.length - 1] = customCategories[customCategories.length - 1] + ' ' + tokens[0];
+          if(tokens.length > 1){
+            customCategories.push(tokens[1]);
+          }
         } else if(lastFound === 'customTitle'){
           customTitle = (customTitle || '') + (' ' + args[i]);
         } else if(lastFound === 'restrict') {
@@ -650,8 +667,18 @@ client.on('message', async (msg) => {
       }
     }
 
+    if(customCategories){
+      let customCategoriesObj = {};
+
+      customCategories.forEach((cat, index) => {
+        customCategoriesObj[customKeys[index]] = cat;
+      });
+
+      customCategories = customCategoriesObj;
+    }
+
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
-    embeds[msg.channel.id][title] = {created: Date.now(), title: title, role: (title === 'Fortress Fight' || role), closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
+    embeds[msg.channel.id][title] = {created: Date.now(), title: title, customCategories, role: (title === 'Fortress Fight' || role), closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
 
     const signup = renderEmbed(embeds[msg.channel.id][title], msg.channel.id);
    
@@ -661,9 +688,8 @@ client.on('message', async (msg) => {
 
         fs.writeFileSync(`${config.dbPath}${config.dbPrefix}${msg.channel.id}-${title}.json`, JSON.stringify(embeds[msg.channel.id][title]), {flag: 'w'});
 
-        let tokens = restriction || Object.keys(events[title]);
+        let tokens = restriction || Object.keys(customCategories || events[title]);
         let promises = [];
-
         tokens.forEach((token) => {
           promises.push(msgRef.react(token));
         });
