@@ -363,7 +363,7 @@ const getReactionInfo = async (react, author, action) => {
     return {};
   }
 
-  if(embed.role){
+  if(react.emoji.name !== '🔚' && embed.role){
     if(!member.roles.cache){
       await react.message.guild.roles.fetch();
     }
