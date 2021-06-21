@@ -697,7 +697,7 @@ client.on('message', async (msg) => {
 
       fs.writeFileSync(`${config.dbLimitsPath}${config.dbPrefix}${msg.channel.id}-${encodeURIComponent(msg.content.split(' ')[0])}.json`, JSON.stringify(conversation.limits), {flag: 'w'});
       
-      sendMessage(msg.channel, 'Saved as "' + msg.content  + '". To view your alliance caps, type `.caps`, to remove type `.caps remove [name]`. Type `.signup ff [name]` to immediately pull up the saved role limitation.');
+      sendMessage(msg.channel, 'Saved as "' + msg.content  + '". To view your alliance caps, type `.cap`, to remove type `.cap remove [name]`. Type `.signup ff [name]` to immediately pull up the saved role limitation.');
 
       msg.delete();
 
@@ -752,7 +752,7 @@ client.on('message', async (msg) => {
       if(customCategories[msg.channel.id]){
         let embed = new Discord.MessageEmbed()
           .setColor('#0099ff')
-          .setTitle('Custom categories in this channel. Type \n`.custom remove [name]` to remove. \nType `.signup custom=[name]` to immediately pull up the saved custom categories.');
+          .setTitle('Custom categories in this channel. \nType `.custom remove [name]` to remove. \nType `.signup custom=[name]` to immediately pull up the saved custom categories.');
 
           Object.keys(customCategories[msg.channel.id]).forEach((key) => {
             embed.addField('Key', key, false);
@@ -794,7 +794,7 @@ client.on('message', async (msg) => {
       if(customLimits[msg.channel.id]){
         let embed = new Discord.MessageEmbed()
           .setColor('#0099ff')
-          .setTitle('Alliance caps in this channel. Type \n`.caps remove [name]` to remove. \nType `.signup ff [name]` to immediately pull up the saved role limitation.');
+          .setTitle('Alliance caps in this channel. \nType `.cap remove [name]` to remove. \nType `.signup ff [name]` to immediately pull up the saved role limitation.');
 
           Object.keys(customLimits[msg.channel.id]).forEach((key) => {
             embed.addField('Key', key, false);
