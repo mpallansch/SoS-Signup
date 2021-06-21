@@ -190,6 +190,7 @@ const responseExpiry = 60000;
 let embeds = {};
 let roleEmbeds = {};
 let customLimits = {};
+let customCategories = {};
 let conversations = {};
 let messageQueue = [];
 
@@ -213,8 +214,8 @@ const renderEmbed = (embed, channel) => {
 
   if(embed.title !== 'State VS State' && embed.title !== 'Capital Clash'){
     let description = '';
-    (embed.restriction || Object.keys(embed.customCategories || events[embed.title])).forEach((key) => {
-      description += key + ': ' + (embed.customCategories || events[embed.title])[key] + ((embed.title !== 'Trap Time' && keyLimitMapping[key]) ? (' ' + (embed.signedUp[key] ? embed.signedUp[key].length : 0) + '/' + keyLimitMapping[key]) : '');
+    (embed.restriction || Object.keys(embed.customCategory || events[embed.title])).forEach((key) => {
+      description += key + ': ' + (embed.customCategory || events[embed.title])[key] + ((embed.title !== 'Trap Time' && keyLimitMapping[key]) ? (' ' + (embed.signedUp[key] ? embed.signedUp[key].length : 0) + '/' + keyLimitMapping[key]) : '');
       if(embed.signedUp[key] && embed.signedUp[key].length > 0){
         description += '​\n```\n';
         embed.signedUp[key].forEach((user) => {
@@ -270,7 +271,7 @@ const renderEmbedInitial = (embed, channel) => {
 
       fs.writeFileSync(`${config.dbEmbedsPath}${config.dbPrefix}${channel.id}-${embed.title}.json`, JSON.stringify(embed), {flag: 'w'});
 
-      let tokens = embed.restriction || Object.keys(embed.customCategories || events[embed.title]);
+      let tokens = embed.restriction || Object.keys(embed.customCategory || events[embed.title]);
       let promises = [];
       tokens.forEach((token) => {
         promises.push(msgRef.react(token));
@@ -480,7 +481,7 @@ const addToCategory = (embed, toAdd, category, channel, author, isAdmin) => {
     } catch(e) {
       sendMessage(channel, 'Error. Please check bot permissions and try again.');
     }
-  } else if((embed.customCategories || events[embed.title])[category] && !embed.closed) {
+  } else if((embed.customCategory || events[embed.title])[category] && !embed.closed) {
     if(violatesUserLimit(embed, toAdd)){
       sendMessage(channel, '<@' + author.id  + '> You have exceeded your signup limit');
       return;
@@ -508,7 +509,7 @@ const removeFromCategory = (embed, toRemove, category, channel, author, isAdmin)
   if(embed.signedUp[category]){
     if(category === '🔚' && (author.id === embed.author || isAdmin)){
       embed.closed = false;
-    } else if((embed.customCategories || events[embed.title])[category] && !embed.closed) {
+    } else if((embed.customCategory || events[embed.title])[category] && !embed.closed) {
       embed.signedUp[category] = embed.signedUp[category].filter(user => user !== toRemove);
     }
     
@@ -522,6 +523,26 @@ const removeFromCategory = (embed, toRemove, category, channel, author, isAdmin)
  
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
+
+  fs.readdirSync(config.dbCategoriesPath).forEach(fileName => {
+    if(fileName.indexOf(config.dbPrefix) === 0){
+      let dbCategory = fs.readFileSync(`${config.dbCategoriesPath}${fileName}`);
+      try {
+        let category = JSON.parse(dbCategory);
+        let tokens = fileName.split('.')[0].split('-');
+        if(tokens.length > 2) {
+          customCategories[tokens[1]] = customCategories[tokens[1]] || {};
+          customCategories[tokens[1]][tokens[2]] = category;
+        } else {
+          console.log('Extraneous file: ' + fileName);
+        }
+      } catch(e) {
+        console.log('Corrupted file: ' + fileName, e);
+      }
+    } else {
+      console.log('Extraneous file: ' + fileName);
+    }
+  });
 
   fs.readdirSync(config.dbLimitsPath).forEach(fileName => {
     if(fileName.indexOf(config.dbPrefix) === 0){
@@ -672,11 +693,39 @@ client.on('message', async (msg) => {
       }
     } else if(conversation.state === 'id'){
       customLimits[msg.channel.id] = customLimits[msg.channel.id] || {};
-      customLimits[msg.channel.id][encodeURIComponent(msg.content)] = conversation.limits;
+      customLimits[msg.channel.id][encodeURIComponent(msg.content.split(' ')[0])] = conversation.limits;
 
-      fs.writeFileSync(`${config.dbLimitsPath}${config.dbPrefix}${msg.channel.id}-${encodeURIComponent(msg.content)}.json`, JSON.stringify(conversation.limits), {flag: 'w'});
+      fs.writeFileSync(`${config.dbLimitsPath}${config.dbPrefix}${msg.channel.id}-${encodeURIComponent(msg.content.split(' ')[0])}.json`, JSON.stringify(conversation.limits), {flag: 'w'});
       
-      sendMessage(msg.channel, 'Saved as "' + msg.content  + '". To view your alliance caps, type `.caps`');
+      sendMessage(msg.channel, 'Saved as "' + msg.content  + '". To view your alliance caps, type `.caps`, to remove type `.caps remove [name]`');
+
+      msg.delete();
+
+      delete conversations[msg.channel.id][msg.author.id];
+      if(Object.keys(conversations[msg.channel.id]).length === 0){
+        delete conversations[msg.channel.id];
+      }
+    } else if(conversation.state === 'saveCategories'){
+      if(msg.content.toLowerCase() === 'yes' || msg.content.toLowerCase() === 'y'){
+        conversation.state = 'categoriesId';
+        replyConversation(msg, conversation, 'What would you like to save it as?');
+      } else {
+        renderEmbedInitial(conversation.embed, msg.channel);
+
+        msg.delete();
+
+        delete conversations[msg.channel.id][msg.author.id];
+        if(Object.keys(conversations[msg.channel.id]).length === 0){
+          delete conversations[msg.channel.id];
+        }
+      }
+    } else if(conversation.state === 'categoriesId'){
+      customCategories[msg.channel.id] = customCategories[msg.channel.id] || {};
+      customCategories[msg.channel.id][encodeURIComponent(msg.content.split(' ')[0])] = conversation.embed.customCategory;
+
+      fs.writeFileSync(`${config.dbCategoriesPath}${config.dbPrefix}${msg.channel.id}-${encodeURIComponent(msg.content.split(' ')[0])}.json`, JSON.stringify(conversation.embed.customCategory), {flag: 'w'});
+
+      sendMessage(msg.channel, 'Saved as "' + msg.content  + '". To view your custom categories, type `.custom`, to remove type `.custom remove [name]`');
 
       msg.delete();
 
@@ -685,6 +734,48 @@ client.on('message', async (msg) => {
         delete conversations[msg.channel.id];
       }
     }
+  } else if(args[0].toLowerCase() === '.custom') {
+    if(args.length > 2 && args[1] === 'remove') {
+      if(customCategories[msg.channel.id] && customCategories[msg.channel.id][encodeURIComponent(args[2])]){
+        delete customCategories[msg.channel.id][encodeURIComponent(args[2])];
+        if(Object.keys(customCategories[msg.channel.id]).length === 0){
+          delete customCategories[msg.channel.id];
+        }
+        fs.unlinkSync(`${config.dbCategoriesPath}${config.dbPrefix}${msg.channel.id}-${encodeURIComponent(args[2])}.json`);
+
+
+        sendMessage(msg.channel, 'Deleted custom category with id: ' + args[2]);
+      } else {
+        sendMessage(msg.channel, 'Unable to find custom category in this channel with id: ' + args[2]);
+      }
+    } else {
+      if(customCategories[msg.channel.id]){
+        let embed = new Discord.MessageEmbed()
+          .setColor('#0099ff')
+          .setTitle('Custom categories in this channel. Type `.custom remove [name]` to remove.');
+
+          Object.keys(customCategories[msg.channel.id]).forEach((key) => {
+            embed.addField('Key', key, false);
+            Object.keys(customCategories[msg.channel.id][key]).forEach((categoryKey) => {
+              embed.addField(categoryKey, customCategories[msg.channel.id][key][categoryKey], true);
+            });
+            embed.addField('\u200b\n', '\u200b', false);
+          });
+
+        try {
+          msg.channel.send(embed).then((msgRef) => {
+            messageQueue.push({message: msgRef, expires: Date.now() + commandExpiry});
+          });
+        } catch(e) {
+          console.log(e);
+          console.log('Message failed to send');
+        }
+      } else {
+        sendMessage(msg.channel, 'There are no custom categories saved to this channel.');
+      }
+    }
+
+    messageQueue.push({message: msg, expires: Date.now() + commandExpiry});
   } else if(args[0].toLowerCase() === '.caps') {
     if(args.length > 2 && args[1] === 'remove') {
       if(customLimits[msg.channel.id] && customLimits[msg.channel.id][encodeURIComponent(args[2])]){
@@ -703,7 +794,7 @@ client.on('message', async (msg) => {
       if(customLimits[msg.channel.id]){
         let embed = new Discord.MessageEmbed()
           .setColor('#0099ff')
-          .setTitle('Alliance caps in this channel');
+          .setTitle('Alliance caps in this channel. Type `.caps remove [name]` to remove.');
 
           Object.keys(customLimits[msg.channel.id]).forEach((key) => {
             embed.addField('Key', key, false);
@@ -788,20 +879,31 @@ client.on('message', async (msg) => {
   } else if (args[0].toLowerCase() === '.signup') {
     let title = titles[0];
     let role = false;
+    let customCategoryFromSave = false;
     let lastFound;
-    let customCategories;
+    let customCategory;
     let customTitle;
     let customLimit;
     let limit;
     let restriction;
+    let conversationIntro;
 
     if(args.length > 1 && typeof args[1] === 'string') {
       if(titleMapping[args[1].toLowerCase()]){
         title = titleMapping[args[1].toLowerCase()];
       } else if(args[1].toLowerCase().indexOf('custom=') === 0 && args[1].length > 7) {
         title = 'Custom';
-        lastFound = 'customCategory';
-        customCategories = args[1].split('=')[1].split(',');
+        if(customCategories[msg.channel.id] && customCategories[msg.channel.id][encodeURIComponent(args[1].split('=')[1])]){
+          customCategory = customCategories[msg.channel.id][encodeURIComponent(args[1].split('=')[1])];
+          customCategoryFromSave = true;
+        } else {
+          lastFound = 'customCategory';
+          customCategory = args[1].split('=')[1].split(',');
+
+          conversations[msg.channel.id] = conversations[msg.channel.id] || {};
+          conversations[msg.channel.id][msg.author.id] = {state: 'saveCategories'};
+          conversationIntro = 'Would you like to save these custom categories?';
+        }
       } else {
         msg.reply('Welcome to State of Survival Sign Up Bot. We currently support the following commands:\n\tff: Fortress Fight (this is the default if no event is specified)\n\trr: Reservoir Raid\n\tsvs: State vs. State\n\tcc: Capital Clash\n\ttt: Trap Time\n\nIn addition we support the following flags:\n\tlimit=[number]: Sets the number of event fields that each user is limited to.\n\trestrict=[categories, comma separated]: Restricts the signup to certain categories\n\ttext=[Header text]: Specifies text that should be shown in the header of the signup\n\nFor more information, visit our official Discord server: https://discord.gg/zcY9DsdKp9');
         return;
@@ -847,11 +949,12 @@ client.on('message', async (msg) => {
         } else if(args[i].toLowerCase() === ('cap') && title === 'Fortress Fight') {
           conversations[msg.channel.id] = conversations[msg.channel.id] || {};
           conversations[msg.channel.id][msg.author.id] = {limits: [], state: 'role'};
+          conversationIntro = 'What role(s) would you like to limit? If typing plain text, type the role exactly how it is displayed.';
         } else if(lastFound === 'customCategory'){
           let tokens = args[i].split(',');
-          customCategories[customCategories.length - 1] = customCategories[customCategories.length - 1] + ' ' + tokens[0];
+          customCategory[customCategory.length - 1] = customCategory[customCategory.length - 1] + ' ' + tokens[0];
           if(tokens.length > 1){
-            customCategories.push(tokens[1]);
+            customCategory.push(tokens[1]);
           }
         } else if(lastFound === 'customTitle'){
           customTitle = (customTitle || '') + (' ' + args[i]);
@@ -883,22 +986,22 @@ client.on('message', async (msg) => {
       }
     }
 
-    if(customCategories){
+    if(customCategory && !customCategoryFromSave){
       let customCategoriesObj = {};
 
-      customCategories.forEach((cat, index) => {
+      customCategory.forEach((cat, index) => {
         customCategoriesObj[customKeys[index]] = cat;
       });
 
-      customCategories = customCategoriesObj;
+      customCategory = customCategoriesObj;
     }
 
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
-    embeds[msg.channel.id][title] = {created: Date.now(), title: title, customLimit, customCategories, role: (title === 'Fortress Fight' || role), closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
+    embeds[msg.channel.id][title] = {created: Date.now(), title: title, customLimit, customCategory, role: (title === 'Fortress Fight' || role), closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
 
-    if(conversations[msg.channel.id] && conversations[msg.channel.id][msg.author.id]){
+    if(conversations[msg.channel.id] && conversations[msg.channel.id][msg.author.id] && conversationIntro){
       conversations[msg.channel.id][msg.author.id].embed = embeds[msg.channel.id][title];
-      replyConversation(msg, conversations[msg.channel.id][msg.author.id], 'What role(s) would you like to limit? If typing plain text, type the role exactly how it is displayed.');
+      replyConversation(msg, conversations[msg.channel.id][msg.author.id], conversationIntro);
     } else {
       renderEmbedInitial(embeds[msg.channel.id][title], msg.channel);
     }
