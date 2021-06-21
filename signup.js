@@ -189,6 +189,8 @@ const responseExpiry = 60000;
 
 let embeds = {};
 let roleEmbeds = {};
+let customLimits = {};
+let conversations = {};
 let messageQueue = [];
 
 const removeEmbed = (channel, title) => {
@@ -198,7 +200,7 @@ const removeEmbed = (channel, title) => {
   }
 
   try {
-    fs.unlinkSync(`${config.dbPath}${config.dbPrefix}${channel}-${title}.json`);
+    fs.unlinkSync(`${config.dbEmbedsPath}${config.dbPrefix}${channel}-${title}.json`);
   } catch (e) {
     console.log(`Error removing database file ${channel}-${title}.json`, e);
   }
@@ -229,7 +231,7 @@ const renderEmbed = (embed, channel) => {
     } else {
       let dbEmbed = {...embed};
       dbEmbed.message = dbEmbed.message ? dbEmbed.message.id : undefined;
-      fs.writeFileSync(`${config.dbPath}${config.dbPrefix}${channel}-${embed.title}.json`, JSON.stringify(dbEmbed), {flag: 'w'});
+      fs.writeFileSync(`${config.dbEmbedsPath}${config.dbPrefix}${channel}-${embed.title}.json`, JSON.stringify(dbEmbed), {flag: 'w'});
     }
 
     newEmbed.setDescription(description);
@@ -257,6 +259,81 @@ const renderEmbed = (embed, channel) => {
   }
 
   return newEmbed;
+};
+
+const renderEmbedInitial = (embed, channel) => {
+  const signup = renderEmbed(embed, channel.id);
+   
+  try {
+    channel.send(signup).then((msgRef) => {
+      embed.message = msgRef;
+
+      fs.writeFileSync(`${config.dbEmbedsPath}${config.dbPrefix}${channel.id}-${embed.title}.json`, JSON.stringify(embed), {flag: 'w'});
+
+      let tokens = embed.restriction || Object.keys(embed.customCategories || events[embed.title]);
+      let promises = [];
+      tokens.forEach((token) => {
+        promises.push(msgRef.react(token));
+      });
+
+      promises.push(msgRef.react('🔚'));
+
+      Promise.all(promises)
+        .catch(() => console.error('One of the emojis failed to react.'));
+    });
+  } catch(e){
+    sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
+  }
+};
+
+const replyConversation = (message, conversation, text) => {
+  if(conversation.currentMessage){
+    conversation.currentMessage.delete();
+  }
+
+  try {
+    message.reply(text).then((msgRef) => {
+      conversation.currentMessage = msgRef;
+
+      message.delete();
+    });
+  } catch(e) {
+
+  }
+};
+
+const violatesCustomLimit = (embed, alliance, category) => {
+  if(!embed || embed.title !== 'Fortress Fight' || !embed.customLimit) {
+    return false;
+  }
+
+  let limitName = 'bunkerLimit';
+
+  let currentValues = {bunkerLimit: 0, facilityLimit: 0};
+  Object.keys(events['Fortress Fight']).forEach((key, index) => {
+    if(embed.signedUp[key] && embed.signedUp[key].indexOf(alliance) !== -1){
+      if(index < 12) {
+        currentValues.bunkerLimit++;
+      } else {
+        currentValues.facilityLimit++;
+      }
+    }
+    if(key === category && index >= 12){
+      limitName = 'facilityLimit';
+    }
+  });
+
+  let violation = false;
+
+  embed.customLimit.forEach((limit) => {
+    if(limit.roles.indexOf(alliance) !== -1){
+      if(limit[limitName] <= currentValues[limitName]){
+        violation = true;
+      }
+    }
+  });
+
+  return violation;
 };
 
 const violatesCategoryLimit = (embed, key) => {
@@ -412,6 +489,10 @@ const addToCategory = (embed, toAdd, category, channel, author, isAdmin) => {
       sendMessage(channel, 'Category has reached the limit.');
       return;
     }
+    if(violatesCustomLimit(embed, toAdd, category)){
+      sendMessage(channel, 'Alliance cap has been reached.');
+      return;
+    }
 
     embed.signedUp[category] = embed.signedUp[category] || [];
     embed.signedUp[category].push(toAdd);
@@ -442,9 +523,29 @@ const removeFromCategory = (embed, toRemove, category, channel, author, isAdmin)
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
 
-  fs.readdirSync(config.dbPath).forEach(fileName => {
+  fs.readdirSync(config.dbLimitsPath).forEach(fileName => {
     if(fileName.indexOf(config.dbPrefix) === 0){
-      let dbEmbed = fs.readFileSync(`${config.dbPath}${fileName}`);
+      let dbLimit = fs.readFileSync(`${config.dbLimitsPath}${fileName}`);
+      try {
+        let limit = JSON.parse(dbLimit);
+        let tokens = fileName.split('.')[0].split('-');
+        if(tokens.length > 2) {
+          customLimits[tokens[1]] = customLimits[tokens[1]] || {};
+          customLimits[tokens[1]][tokens[2]] = limit;
+        } else {
+          console.log('Extraneous file: ' + fileName);
+        }
+      } catch(e) {
+        console.log('Corrupted file: ' + fileName, e);
+      }
+    } else {
+      console.log('Extraneous file: ' + fileName);
+    }
+  });
+
+  fs.readdirSync(config.dbEmbedsPath).forEach(fileName => {
+    if(fileName.indexOf(config.dbPrefix) === 0){
+      let dbEmbed = fs.readFileSync(`${config.dbEmbedsPath}${fileName}`);
       try {
         let embed = JSON.parse(dbEmbed);
         let tokens = fileName.split('.')[0].split('-');
@@ -521,7 +622,112 @@ client.on('messageReactionRemove', async (react, author) => {
 client.on('message', async (msg) => {
   const args = (msg.content && msg.content.length > 0 ) ? msg.content.split(' ') : [''];
 
-  if (args[0].toLowerCase() === '.add' || args[0].toLowerCase() === '.remove'){
+  if(conversations[msg.channel.id] && conversations[msg.channel.id][msg.author.id]) {
+    let conversation = conversations[msg.channel.id][msg.author.id];
+    if(conversation.state === 'role'){
+      conversation.limits.push({roles: msg.content.split(',')});
+      conversation.state = 'bunkers';
+      replyConversation(msg, conversation, 'How many bunkers should they be limited to?');
+    } else if(conversation.state === 'bunkers'){
+      let bunkerLimit = parseInt(msg.content);
+      if(isNaN(bunkerLimit)){
+        replyConversation(msg, conversation, 'Please enter a valid number');
+      } else {
+        conversation.limits[conversation.limits.length - 1].bunkerLimit = bunkerLimit;
+        conversation.state = 'facilities';
+        replyConversation(msg, conversation, 'How many facilities should they be limited to?');
+      }
+    } else if(conversation.state === 'facilities'){
+      let facilityLimit = parseInt(msg.content);
+      if(isNaN(facilityLimit)){
+        replyConversation(msg, conversation, 'Please enter a valid number');
+      } else {
+        conversation.limits[conversation.limits.length - 1].facilityLimit = facilityLimit;
+        conversation.state = 'more';
+        replyConversation(msg, conversation, 'Any more roles?');
+      }
+    } else if(conversation.state === 'more') {
+      if(msg.content.toLowerCase() === 'yes' || msg.content.toLowerCase() === 'y'){
+        conversation.state = 'role';
+        replyConversation(msg, conversation, 'What role(s) would you like to limit? If typing plain text, type the role exactly how it is displayed.');
+      } else {
+        conversation.state = 'save';
+        replyConversation(msg, conversation, 'Would you like to save this limitation?');
+      }
+    } else if(conversation.state === 'save'){
+      if(msg.content.toLowerCase() === 'yes' || msg.content.toLowerCase() === 'y'){
+        conversation.state = 'id';
+        replyConversation(msg, conversation, 'What would you like to save it as?');
+      } else {
+        conversation.embed.customLimit = conversation.limits;
+
+        renderEmbedInitial(conversation.embed, msg.channel);
+
+        msg.delete();
+
+        delete conversations[msg.channel.id][msg.author.id];
+        if(Object.keys(conversations[msg.channel.id]).length === 0){
+          delete conversations[msg.channel.id];
+        }
+      }
+    } else if(conversation.state === 'id'){
+      customLimits[msg.channel.id] = customLimits[msg.channel.id] || {};
+      customLimits[msg.channel.id][encodeURIComponent(msg.content)] = conversation.limits;
+
+      fs.writeFileSync(`${config.dbLimitsPath}${config.dbPrefix}${msg.channel.id}-${encodeURIComponent(msg.content)}.json`, JSON.stringify(conversation.limits), {flag: 'w'});
+      
+      sendMessage(msg.channel, 'Saved as "' + msg.content  + '". To view your alliance caps, type `.caps`');
+
+      msg.delete();
+
+      delete conversations[msg.channel.id][msg.author.id];
+      if(Object.keys(conversations[msg.channel.id]).length === 0){
+        delete conversations[msg.channel.id];
+      }
+    }
+  } else if(args[0].toLowerCase() === '.caps') {
+    if(args.length > 2 && args[1] === 'remove') {
+      if(customLimits[msg.channel.id] && customLimits[msg.channel.id][encodeURIComponent(args[2])]){
+        delete customLimits[msg.channel.id][encodeURIComponent(args[2])];
+        if(Object.keys(customLimits[msg.channel.id]).length === 0){
+          delete customLimits[msg.channel.id];
+        }
+        fs.unlinkSync(`${config.dbLimitsPath}${config.dbPrefix}${msg.channel.id}-${encodeURIComponent(args[2])}.json`);
+
+
+        sendMessage(msg.channel, 'Deleted alliance cap with id: ' + args[2]);
+      } else {
+        sendMessage(msg.channel, 'Unable to find alliance cap in this channel with id: ' + args[2]);
+      }
+    } else {
+      if(customLimits[msg.channel.id]){
+        let embed = new Discord.MessageEmbed()
+          .setColor('#0099ff')
+          .setTitle('Alliance caps in this channel');
+
+          Object.keys(customLimits[msg.channel.id]).forEach((key) => {
+            embed.addField('Key', key, false);
+            customLimits[msg.channel.id][key].forEach((limit) => {
+              embed.addField('Roles: ' + limit.roles.join(', '), '`Bunkers: ' + limit.bunkerLimit + ' | Facilities: ' + limit.facilityLimit + '`', true);
+            });
+            embed.addField('\u200b\n', '\u200b', false);
+          });
+
+        try {
+          msg.channel.send(embed).then((msgRef) => {
+            messageQueue.push({message: msgRef, expires: Date.now() + commandExpiry});
+          });
+        } catch(e) {
+          console.log(e);
+          console.log('Message failed to send');
+        }
+      } else {
+        sendMessage(msg.channel, 'There are no alliance caps saved to this channel.');
+      }
+    }
+
+    messageQueue.push({message: msg, expires: Date.now() + commandExpiry});
+  } else if (args[0].toLowerCase() === '.add' || args[0].toLowerCase() === '.remove'){
     if(args.length >= 3){
       let key = keyMapping[args[args.length - 1]] || keyMapping[args[args.length - 1].toLowerCase()] || args[args.length - 1];
       let embed = getEmbedFromKey(msg.channel.id, key);
@@ -544,8 +750,12 @@ client.on('message', async (msg) => {
           if(args[0] === '.add'){
             if(!violatesUserLimit(embed, name)){
               if(!violatesCategoryLimit(embed, key)){
-                embed.signedUp[key] = embed.signedUp[key] || [];
-                embed.signedUp[key].push(nickname || name);
+                if(!violatesCustomLimit(embed, name, key)){
+                  embed.signedUp[key] = embed.signedUp[key] || [];
+                  embed.signedUp[key].push(nickname || name);
+                } else {
+                  sendMessage(msg.channel, 'Adding would exceed alliance cap.');
+                }
               } else {
                 sendMessage(msg.channel, 'Adding user would exceed category limit.');
               }
@@ -581,6 +791,7 @@ client.on('message', async (msg) => {
     let lastFound;
     let customCategories;
     let customTitle;
+    let customLimit;
     let limit;
     let restriction;
 
@@ -633,6 +844,9 @@ client.on('message', async (msg) => {
           if(tokens.length > 1){
             customTitle = tokens[1];
           }
+        } else if(args[i].toLowerCase() === ('cap') && title === 'Fortress Fight') {
+          conversations[msg.channel.id] = conversations[msg.channel.id] || {};
+          conversations[msg.channel.id][msg.author.id] = {limits: [], state: 'role'};
         } else if(lastFound === 'customCategory'){
           let tokens = args[i].split(',');
           customCategories[customCategories.length - 1] = customCategories[customCategories.length - 1] + ' ' + tokens[0];
@@ -650,6 +864,8 @@ client.on('message', async (msg) => {
             restriction = restriction || [];
             restriction.push(keyMapping[key]);
           }
+        } else if(customLimits[msg.channel.id] && customLimits[msg.channel.id][encodeURIComponent(args[i])]){
+          customLimit = customLimits[msg.channel.id][encodeURIComponent(args[i])];
         }
       }
     } 
@@ -678,29 +894,13 @@ client.on('message', async (msg) => {
     }
 
     embeds[msg.channel.id] = embeds[msg.channel.id] || {};
-    embeds[msg.channel.id][title] = {created: Date.now(), title: title, customCategories, role: (title === 'Fortress Fight' || role), closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
+    embeds[msg.channel.id][title] = {created: Date.now(), title: title, customLimit, customCategories, role: (title === 'Fortress Fight' || role), closed: false, signedUp: {}, limit: limit, restriction: restriction, customTitle: customTitle, author: msg.author.id};
 
-    const signup = renderEmbed(embeds[msg.channel.id][title], msg.channel.id);
-   
-    try {
-      msg.channel.send(signup).then((msgRef) => {
-        embeds[msg.channel.id][title].message = msgRef;
-
-        fs.writeFileSync(`${config.dbPath}${config.dbPrefix}${msg.channel.id}-${title}.json`, JSON.stringify(embeds[msg.channel.id][title]), {flag: 'w'});
-
-        let tokens = restriction || Object.keys(customCategories || events[title]);
-        let promises = [];
-        tokens.forEach((token) => {
-          promises.push(msgRef.react(token));
-        });
-
-        promises.push(msgRef.react('🔚'));
-
-        Promise.all(promises)
-          .catch(() => console.error('One of the emojis failed to react.'));
-      });
-    } catch(e){
-      sendMessage(msg.channel, 'Error. Please check bot permissions and try again.');
+    if(conversations[msg.channel.id] && conversations[msg.channel.id][msg.author.id]){
+      conversations[msg.channel.id][msg.author.id].embed = embeds[msg.channel.id][title];
+      replyConversation(msg, conversations[msg.channel.id][msg.author.id], 'What role(s) would you like to limit? If typing plain text, type the role exactly how it is displayed.');
+    } else {
+      renderEmbedInitial(embeds[msg.channel.id][title], msg.channel);
     }
 
     messageQueue.push({message: msg, expires: Date.now() + commandExpiry});
